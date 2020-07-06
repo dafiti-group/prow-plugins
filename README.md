@@ -4,3 +4,4 @@
 
 - [Prow external plugins](https://github.com/kubernetes/test-infra/tree/master/prow/external-plugins)
 - [Prow plugins](https://github.com/kubernetes/test-infra/tree/master/prow/plugins)
+- [Release Blocker Plugin](https://github.com/davidvossel/release-blocker-plugin)
