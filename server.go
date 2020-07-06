@@ -1,12 +1,9 @@
 /*
 Copyright 2017 The Kubernetes Authors.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,7 +36,7 @@ const pluginName = "refresh"
 
 var refreshRe = regexp.MustCompile(`(?mi)^/refresh\s*$`)
 
-func helpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
+func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	pluginHelp := &pluginhelp.PluginHelp{
 		Description: `The refresh plugin is used for refreshing status contexts in PRs. Useful in case GitHub breaks down.`,
 	}
@@ -52,7 +49,7 @@ func helpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	return pluginHelp, nil
 }
 
-type server struct {
+type Server struct {
 	tokenGenerator func() []byte
 	prowURL        string
 	configAgent    *config.Agent
@@ -60,7 +57,7 @@ type server struct {
 	log            *logrus.Entry
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		return
@@ -72,7 +69,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) handleEvent(eventType, eventGUID string, payload []byte) error {
+func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error {
 	l := logrus.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
@@ -97,7 +94,7 @@ func (s *server) handleEvent(eventType, eventGUID string, payload []byte) error 
 	return nil
 }
 
-func (s *server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent) error {
+func (s *Server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent) error {
 	if !ic.Issue.IsPullRequest() || ic.Action != github.IssueCommentActionCreated || ic.Issue.State == "closed" {
 		return nil
 	}
@@ -189,7 +186,7 @@ func (s *server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent
 	return nil
 }
 
-func (s *server) reportForProwJob(pj prowapi.ProwJob, configs []config.JenkinsOperator) *template.Template {
+func (s *Server) reportForProwJob(pj prowapi.ProwJob, configs []config.JenkinsOperator) *template.Template {
 	for _, cfg := range configs {
 		if cfg.LabelSelector.Matches(labels.Set(pj.Labels)) {
 			return cfg.ReportTemplateForRepo(pj.Spec.Refs)

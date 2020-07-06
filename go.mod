@@ -3,13 +3,17 @@ module github.com/dafiti/prow-plugins
 go 1.14
 
 require (
-	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
-	github.com/envoyproxy/protoc-gen-validate v0.1.0 // indirect
-	github.com/golang/protobuf v1.4.2 // indirect
-	github.com/iancoleman/strcase v0.0.0-20191112232945-16388991a334 // indirect
-	github.com/lyft/protoc-gen-star v0.4.15 // indirect
 	github.com/sirupsen/logrus v1.6.0
-	github.com/spf13/afero v1.3.1 // indirect
-	k8s.io/apimachinery v0.18.5
-	k8s.io/test-infra v0.0.0-20200701161817-c0cd15acd87b
+	k8s.io/apimachinery v0.17.3
+	k8s.io/test-infra v0.0.0-20200519204219-34a27f5e6d4e
+)
+
+replace (
+	cloud.google.com/go => cloud.google.com/go v0.44.3
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.2.0+incompatible
+	golang.org/x/lint => golang.org/x/lint v0.0.0-20190409202823-959b441ac422
+	k8s.io/api => k8s.io/api v0.17.3
+	k8s.io/apimachinery => k8s.io/apimachinery v0.17.3
+	k8s.io/client-go => k8s.io/client-go v0.17.3
+	k8s.io/code-generator => k8s.io/code-generator v0.17.3
 )

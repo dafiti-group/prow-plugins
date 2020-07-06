@@ -102,7 +102,7 @@ func main() {
 		logrus.WithError(err).Fatal("Error getting GitHub client.")
 	}
 
-	serv := &server{
+	serv := &Server{
 		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		prowURL:        o.prowURL,
 		configAgent:    configAgent,
@@ -112,7 +112,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", serv)
-	externalplugins.ServeExternalPluginHelp(mux, log, helpProvider)
+	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
 	interrupts.ListenAndServe(httpServer, 5*time.Second)
