@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"text/template"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -95,6 +96,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error 
 }
 
 func (s *Server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent) error {
+	pp.Println("Hy")
 	if !ic.Issue.IsPullRequest() || ic.Action != github.IssueCommentActionCreated || ic.Issue.State == "closed" {
 		return nil
 	}
