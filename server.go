@@ -22,7 +22,6 @@ import (
 	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
-	gogh "github.com/google/go-github/github"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
@@ -79,32 +78,36 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	case "pull_request":
 
 		var p github.PullRequestEvent
-		var a1 github.PullRequest
-		var a2 gogh.PullRequestEvent
-		var a3 gogh.PullRequest
+		// var a1 github.PullRequest
+		// var a2 gogh.PullRequestEvent
+		// var a3 gogh.PullRequest
 
-		err = json.Unmarshal(payload, &p)
-		pp.Println("github.PullRequestEvent", p, "error", err)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &a1)
-		pp.Println("github.PullRequest", a1, "error", err)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &a2)
-		pp.Println("gogh.PullRequestEvent", a2, "error", err)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &a3)
-		pp.Println("gogh.PullRequest", a3, "error", err)
-		pp.Println(err)
+		// err = json.Unmarshal(payload, &p)
+		// pp.Println("github.PullRequestEvent", p, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a1)
+		// pp.Println("github.PullRequest", a1, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a2)
+		// pp.Println("gogh.PullRequestEvent", a2, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a3)
+		// pp.Println("gogh.PullRequest", a3, "error", err)
+		// pp.Println(err)
 
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
 		}
-		return nil
-		go func() {
-			if err := s.handlePR(l, &p); err != nil {
-				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
-			}
-		}()
+
+		if err := s.handlePR(l, &p); err != nil {
+			s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+		}
+
+		// go func() {
+		// 	if err := s.handlePR(l, &p); err != nil {
+		// 		s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+		// 	}
+		// }()
 	default:
 		logrus.Debugf("skipping event of type %q", eventType)
 	}
