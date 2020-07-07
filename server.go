@@ -22,6 +22,7 @@ import (
 	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
+	gogh "github.com/google/go-github/github"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
@@ -73,24 +74,27 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	)
 
 	pp.Println(eventType)
+	pp.Println(eventGUID)
 	switch eventType {
 	case "pull_request":
-		// var pr github.PullRequest
+
 		var p github.PullRequestEvent
-		// var gpe gogh.PullRequestEvent
-		// var gpr gogh.PullRequest
-		// err = json.Unmarshal(payload, &pr)
-		// pp.Println(pr)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &pe)
-		// pp.Println(pe)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &gpe)
-		// pp.Println(gpe)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &gpr)
-		// pp.Println(gpr)
-		// pp.Println(err)
+		var a1 github.PullRequest
+		var a2 gogh.PullRequestEvent
+		var a3 gogh.PullRequest
+
+		err = json.Unmarshal(payload, &p)
+		pp.Println("github.PullRequestEvent", p, "error", err)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &a1)
+		pp.Println("github.PullRequest", a1, "error", err)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &a2)
+		pp.Println("gogh.PullRequestEvent", a2, "error", err)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &a3)
+		pp.Println("gogh.PullRequest", a3, "error", err)
+		pp.Println(err)
 
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
@@ -108,8 +112,6 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
-	pp.Println(p)
-
 	var (
 		org    = p.Repo.Owner.Login
 		repo   = p.Repo.Name
@@ -117,13 +119,14 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		title  = p.PullRequest.Title
 	)
 
+	pp.Println("title", title, "org", org, "repo", repo, "number", number)
+
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
 		github.PrLogField:   number,
 		"title":             title,
 	})
-	pp.Println("title", title, "org", org, "repo", repo, "number", number)
 
 	if title == "test" {
 		err = s.ghc.AddLabel(org, repo, number, "missing-jira-tag")

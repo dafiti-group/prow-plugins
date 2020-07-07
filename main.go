@@ -113,7 +113,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", serv)
+	mux.Handle("/jira-checker", serv)
 	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
