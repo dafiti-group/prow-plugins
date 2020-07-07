@@ -16,6 +16,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 
@@ -53,6 +54,10 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	requestBody, err := ioutil.ReadAll(r.Body)
+
+	logrus.Println("Request:", string(requestBody), err)
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		return
