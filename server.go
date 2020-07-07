@@ -132,7 +132,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	})
 
 	if title == "test" {
-		err = s.ghc.AddLabel(org, repo, number, "missing-jira-tag")
+		err = s.ghc.AddLabel(org, repo, number, "invalid")
 	}
 	if err != nil {
 		l.Error(err)
