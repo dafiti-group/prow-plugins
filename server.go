@@ -115,6 +115,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	pp.Println(p)
 	var (
 		org    = p.Repo.Owner.Login
 		repo   = p.Repo.Name
