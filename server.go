@@ -22,6 +22,7 @@ import (
 	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
+	gogh "github.com/google/go-github/github"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
@@ -77,11 +78,19 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	case "pull_request":
 		var pe github.PullRequestEvent
 		var pr github.PullRequest
+		var gpe gogh.PullRequestEvent
+		var gpr gogh.PullRequest
 		err = json.Unmarshal(payload, &pr)
 		pp.Println(pr)
 		pp.Println(err)
 		err = json.Unmarshal(payload, &pe)
 		pp.Println(pe)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &gpe)
+		pp.Println(gpe)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &gpr)
+		pp.Println(gpr)
 		pp.Println(err)
 
 		if err := json.Unmarshal(payload, &pr); err != nil {
