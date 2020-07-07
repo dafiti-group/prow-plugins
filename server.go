@@ -22,7 +22,6 @@ import (
 	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
-	gogh "github.com/google/go-github/github"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
@@ -76,29 +75,29 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	pp.Println(eventType)
 	switch eventType {
 	case "pull_request":
-		var pe github.PullRequestEvent
-		var pr github.PullRequest
-		var gpe gogh.PullRequestEvent
-		var gpr gogh.PullRequest
-		err = json.Unmarshal(payload, &pr)
-		pp.Println(pr)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &pe)
-		pp.Println(pe)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &gpe)
-		pp.Println(gpe)
-		pp.Println(err)
-		err = json.Unmarshal(payload, &gpr)
-		pp.Println(gpr)
-		pp.Println(err)
+		// var pr github.PullRequest
+		var p github.PullRequestEvent
+		// var gpe gogh.PullRequestEvent
+		// var gpr gogh.PullRequest
+		// err = json.Unmarshal(payload, &pr)
+		// pp.Println(pr)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &pe)
+		// pp.Println(pe)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &gpe)
+		// pp.Println(gpe)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &gpr)
+		// pp.Println(gpr)
+		// pp.Println(err)
 
-		if err := json.Unmarshal(payload, &pr); err != nil {
+		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
 		}
 		return nil
 		go func() {
-			if err := s.handlePR(l, &pr); err != nil {
+			if err := s.handlePR(l, &p); err != nil {
 				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
 		}()
@@ -108,15 +107,14 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	return nil
 }
 
-func (s *Server) handlePR(l *logrus.Entry, pr *github.PullRequest) (err error) {
-	pp.Println(pr)
+func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	pp.Println(p)
 
 	var (
-		org    = pr.Base.Repo.Owner.Login
-		repo   = pr.Base.Repo.Name
-		number = pr.Number
-		title  = pr.Title
-		draft  = pr.Draft
+		org    = p.Repo.Owner.Login
+		repo   = p.Repo.Name
+		number = p.Number
+		title  = p.PullRequest.Title
 	)
 
 	l = l.WithFields(logrus.Fields{
@@ -124,7 +122,6 @@ func (s *Server) handlePR(l *logrus.Entry, pr *github.PullRequest) (err error) {
 		github.RepoLogField: repo,
 		github.PrLogField:   number,
 		"title":             title,
-		"draft":             draft,
 	})
 	pp.Println("title", title, "org", org, "repo", repo, "number", number)
 
