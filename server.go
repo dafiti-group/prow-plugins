@@ -64,7 +64,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error {
+func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
 	l := logrus.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
@@ -72,12 +72,22 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error 
 		},
 	)
 
+	pp.Println(eventType)
 	switch eventType {
 	case "pull_request":
+		var pe github.PullRequestEvent
 		var pr github.PullRequest
+		err = json.Unmarshal(payload, &pr)
+		pp.Println(pr)
+		pp.Println(err)
+		err = json.Unmarshal(payload, &pe)
+		pp.Println(pe)
+		pp.Println(err)
+
 		if err := json.Unmarshal(payload, &pr); err != nil {
 			return err
 		}
+		return nil
 		go func() {
 			if err := s.handlePR(l, &pr); err != nil {
 				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
