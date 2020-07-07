@@ -130,6 +130,12 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		github.PrLogField:   number,
 		"title":             title,
 	})
+	labels, err := s.ghc.GetIssueLabels(org, repo, number)
+	if err != nil {
+		l.Error(err)
+		return err
+	}
+	pp.Println(labels)
 
 	if title == "test" {
 		err = s.ghc.AddLabel(org, repo, number, "invalid")
