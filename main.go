@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/test-infra/prow/interrupts"
 
@@ -71,7 +70,6 @@ func gatherOptions() options {
 }
 
 func main() {
-	pp.Println("Start")
 	o := gatherOptions()
 	if err := o.Validate(); err != nil {
 		logrus.Fatalf("Invalid options: %v", err)
@@ -84,17 +82,17 @@ func main() {
 
 	configAgent := &config.Agent{}
 	if err := configAgent.Start(o.configPath, ""); err != nil {
-		log.WithError(err).Fatal("Error starting config agent.")
+		log.Errorf("Error starting config agent. %v", err)
 	}
 
 	secretAgent := &secret.Agent{}
 	if err := secretAgent.Start([]string{o.github.TokenPath, o.webhookSecretFile}); err != nil {
-		logrus.WithError(err).Fatal("Error starting secrets agent.")
+		log.Errorf("Error starting secrets agent. %v", err)
 	}
 
 	githubClient, err := o.github.GitHubClient(secretAgent, o.dryRun)
 	if err != nil {
-		logrus.WithError(err).Fatal("Error getting GitHub client.")
+		log.Errorf("Error getting GitHub client. %v", err)
 	}
 
 	serv := &Server{

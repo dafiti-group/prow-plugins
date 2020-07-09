@@ -16,7 +16,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 
@@ -54,10 +53,6 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	requestBody, err := ioutil.ReadAll(r.Body)
-
-	logrus.Println("Request:", string(requestBody), err)
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		return
@@ -65,7 +60,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Event received. Have a nice day.")
 
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		logrus.WithError(err).Error("Error parsing event.")
+		logrus.Errorf("Error parsing event. %v", err)
 	}
 }
 
@@ -77,8 +72,6 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		},
 	)
 
-	pp.Println(eventType)
-	pp.Println(eventGUID)
 	switch eventType {
 	case "pull_request":
 
@@ -105,7 +98,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		}
 
 		if err := s.handlePR(l, &p); err != nil {
-			s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+			s.log.WithFields(l.Data).Errorf("Refreshing github statuses failed. %v", err)
 		}
 
 		// go func() {
