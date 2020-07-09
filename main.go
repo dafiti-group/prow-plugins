@@ -19,9 +19,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -55,10 +53,6 @@ func (o *options) Validate() error {
 		}
 	}
 
-	if _, err := url.ParseRequestURI(o.prowURL); err != nil {
-		return fmt.Errorf("invalid -prow-url URI: %q", o.prowURL)
-	}
-
 	return nil
 }
 
@@ -69,7 +63,6 @@ func gatherOptions() options {
 	fs.StringVar(&o.configPath, "config-path", "/etc/config/config.yaml", "Path to config.yaml.")
 	fs.BoolVar(&o.dryRun, "dry-run", true, "Dry run for testing. Uses API tokens but does not mutate.")
 	fs.StringVar(&o.webhookSecretFile, "hmac-secret-file", "/etc/webhook/hmac", "Path to the file containing the GitHub HMAC secret.")
-	fs.StringVar(&o.prowURL, "prow-url", "", "Prow frontend URL.")
 	for _, group := range []flagutil.OptionGroup{&o.github} {
 		group.AddFlags(fs)
 	}
@@ -106,7 +99,6 @@ func main() {
 
 	serv := &Server{
 		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
-		prowURL:        o.prowURL,
 		configAgent:    configAgent,
 		ghc:            githubClient,
 		log:            log,
