@@ -23,7 +23,6 @@ import (
 
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
-	"k8s.io/test-infra/prow/labels"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
 
@@ -34,6 +33,10 @@ type Server struct {
 	ghc            github.Client
 	log            *logrus.Entry
 }
+
+const (
+	InvalidLabel = "do-not-merge/no-jira-issue-on-title"
+)
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
@@ -107,7 +110,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 
 	pp.Println(s.ghc)
 	if title == "test" {
-		err = s.ghc.AddLabel(org, repo, number, labels.WorkInProgress)
+		err = s.ghc.AddLabel(org, repo, number, InvalidLabel)
 		if err != nil {
 			l.WithError(err).Error("failed to add label")
 			return err
