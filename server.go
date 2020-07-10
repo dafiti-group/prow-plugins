@@ -109,14 +109,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 }
 
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
-	pluginHelp := &pluginhelp.PluginHelp{
-		Description: `The refresh plugin is used for refreshing status contexts in PRs. Useful in case GitHub breaks down.`,
-	}
-	pluginHelp.AddCommand(pluginhelp.Command{
-		Usage:       "/jira-checker",
-		Description: "Check PR Title for Jira Tag",
-		WhoCanUse:   "Anyone",
-		Examples:    []string{"/jira-checker"},
-	})
-	return pluginHelp, nil
+	return &pluginhelp.PluginHelp{
+		Description: "The Jira checker plugin checks your PR name",
+	}, nil
 }
