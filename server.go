@@ -36,11 +36,15 @@ type Server struct {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("will validade webhook")
+	pp.Println("token from generator", string(s.tokenGenerator()))
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		s.log.Error("validate webhook failed")
 		return
 	}
+	pp.Println("==========")
+	fmt.Println(string(payload))
+	pp.Println("==========")
 	s.log.Info("validade webhook ok")
 
 	// Respond with
