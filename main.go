@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/test-infra/prow/interrupts"
 
@@ -77,6 +78,7 @@ func gatherOptions() options {
 }
 
 func main() {
+	pp.Println("Start")
 	o := gatherOptions()
 	if err := o.Validate(); err != nil {
 		logrus.Fatalf("Invalid options: %v", err)
@@ -111,7 +113,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", serv)
+	mux.Handle("/jira-checker", serv)
 	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()

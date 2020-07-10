@@ -16,19 +16,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
-	"text/template"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/labels"
 
-	prowapi "k8s.io/test-infra/prow/apis/prowjobs/v1"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
-	"k8s.io/test-infra/prow/github/report"
-	"k8s.io/test-infra/prow/pjutil"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
 
@@ -69,7 +64,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error {
+func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
 	l := logrus.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
@@ -77,120 +72,79 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error 
 		},
 	)
 
+	pp.Println(eventType)
+	pp.Println(eventGUID)
 	switch eventType {
-	case "issue_comment":
-		var ic github.IssueCommentEvent
-		if err := json.Unmarshal(payload, &ic); err != nil {
+	case "pull_request":
+
+		var p github.PullRequestEvent
+		// var a1 github.PullRequest
+		// var a2 gogh.PullRequestEvent
+		// var a3 gogh.PullRequest
+
+		// err = json.Unmarshal(payload, &p)
+		// pp.Println("github.PullRequestEvent", p, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a1)
+		// pp.Println("github.PullRequest", a1, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a2)
+		// pp.Println("gogh.PullRequestEvent", a2, "error", err)
+		// pp.Println(err)
+		// err = json.Unmarshal(payload, &a3)
+		// pp.Println("gogh.PullRequest", a3, "error", err)
+		// pp.Println(err)
+
+		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
 		}
-		go func() {
-			if err := s.handleIssueComment(l, ic); err != nil {
-				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
-			}
-		}()
+
+		if err := s.handlePR(l, &p); err != nil {
+			s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+		}
+
+		// go func() {
+		// 	if err := s.handlePR(l, &p); err != nil {
+		// 		s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+		// 	}
+		// }()
 	default:
 		logrus.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
 }
 
-func (s *Server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent) error {
-	if !ic.Issue.IsPullRequest() || ic.Action != github.IssueCommentActionCreated || ic.Issue.State == "closed" {
-		return nil
-	}
+func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	pp.Println(p)
+	var (
+		org    = p.Repo.Owner.Login
+		repo   = p.Repo.Name
+		number = p.Number
+		title  = p.PullRequest.Title
+	)
 
-	org := ic.Repo.Owner.Login
-	repo := ic.Repo.Name
-	num := ic.Issue.Number
+	pp.Println("title", title, "org", org, "repo", repo, "number", number)
 
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
-		github.PrLogField:   num,
+		github.PrLogField:   number,
+		"title":             title,
 	})
-
-	if !refreshRe.MatchString(ic.Comment.Body) {
-		return nil
-	}
-	s.log.WithFields(l.Data).Info("Requested a status refresh.")
-
-	// TODO: Retries
-	resp, err := http.Get(s.prowURL + "/prowjobs.js")
+	labels, err := s.ghc.GetIssueLabels(org, repo, number)
 	if err != nil {
+		l.Error(err)
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("status code not 2XX: %v", resp.Status)
-	}
+	pp.Println(labels)
 
-	data, err := ioutil.ReadAll(resp.Body)
+	if title == "test" {
+		err = s.ghc.AddLabel(org, repo, number, "invalid")
+	}
 	if err != nil {
+		l.Error(err)
 		return err
 	}
 
-	var list struct {
-		PJs []prowapi.ProwJob `json:"items"`
-	}
-	if err := json.Unmarshal(data, &list); err != nil {
-		return fmt.Errorf("cannot unmarshal data from deck: %v", err)
-	}
-
-	pr, err := s.ghc.GetPullRequest(org, repo, num)
-	if err != nil {
-		return err
-	}
-
-	var presubmits []prowapi.ProwJob
-	for _, pj := range list.PJs {
-		if pj.Spec.Type != "presubmit" {
-			continue
-		}
-		if !pj.Spec.Report {
-			continue
-		}
-		if pj.Spec.Refs.Pulls[0].Number != num {
-			continue
-		}
-		if pj.Spec.Refs.Pulls[0].SHA != pr.Head.SHA {
-			continue
-		}
-		presubmits = append(presubmits, pj)
-	}
-
-	if len(presubmits) == 0 {
-		s.log.WithFields(l.Data).Info("No prowjobs found.")
-		return nil
-	}
-
-	jenkinsConfig := s.configAgent.Config().JenkinsOperators
-	kubeReport := s.configAgent.Config().Plank.ReportTemplateForRepo(&prowapi.Refs{Org: org, Repo: repo})
-	reportTypes := s.configAgent.Config().GitHubReporter.JobTypesToReport
-	for _, pj := range pjutil.GetLatestProwJobs(presubmits, prowapi.PresubmitJob) {
-		var reportTemplate *template.Template
-		switch pj.Spec.Agent {
-		case prowapi.KubernetesAgent:
-			reportTemplate = kubeReport
-		case prowapi.JenkinsAgent:
-			reportTemplate = s.reportForProwJob(pj, jenkinsConfig)
-		}
-		if reportTemplate == nil {
-			continue
-		}
-
-		s.log.WithFields(l.Data).Infof("Refreshing the status of job %q (pj: %s)", pj.Spec.Job, pj.ObjectMeta.Name)
-		if err := report.Report(s.ghc, reportTemplate, pj, reportTypes); err != nil {
-			s.log.WithError(err).WithFields(l.Data).Info("Failed report.")
-		}
-	}
-	return nil
-}
-
-func (s *Server) reportForProwJob(pj prowapi.ProwJob, configs []config.JenkinsOperator) *template.Template {
-	for _, cfg := range configs {
-		if cfg.LabelSelector.Matches(labels.Set(pj.Labels)) {
-			return cfg.ReportTemplateForRepo(pj.Spec.Refs)
-		}
-	}
-	return nil
+	return err
 }
