@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/test-infra/prow/config"
@@ -35,18 +34,15 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.log.Info("will validade webhook")
-	pp.Println("token from generator", string(s.tokenGenerator()))
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		s.log.Error("validate webhook failed")
 		return
 	}
-	s.log.Info("webhook ok")
 
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		s.log.Errorf("Error parsing event. %v", err)
+		s.log.WithError(err).Error("Error parsing event.")
 		fmt.Fprint(w, "Something went wrong")
 		return
 	}
@@ -72,7 +68,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		}
 
 		if err := s.handlePR(l, &p); err != nil {
-			s.log.WithFields(l.Data).Errorf("Refreshing github statuses failed. %v", err)
+			s.log.WithFields(l.Data).WithError(err).Error("Refreshing github statuses failed.")
 		}
 
 		// go func() {
@@ -93,7 +89,6 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		number = p.Number
 		title  = p.PullRequest.Title
 	)
-	pp.Println("title", title, "org", org, "repo", repo, "number", number)
 
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
@@ -102,22 +97,12 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		"title":             title,
 	})
 
-	s.log.Info("get labels")
-	labels, err := s.ghc.GetIssueLabels(org, repo, number)
+	err = s.ghc.AddLabel(org, repo, number, "invalid")
 	if err != nil {
-		l.Errorf("failed to get labels", err)
+		l.WithError(err).Error("failed to add label")
 		return err
 	}
-	pp.Println("labels", labels)
-
-	if title == "test" {
-		s.log.Info("will add label")
-		err = s.ghc.AddLabel(org, repo, number, "invalid")
-		if err != nil {
-			l.Errorf("Failed to add label %v", err)
-			return err
-		}
-	}
+	l.Info("Ok")
 
 	return err
 }

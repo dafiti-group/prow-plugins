@@ -78,7 +78,8 @@ func main() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	// TODO: Use global option from the prow config.
 	logrus.SetLevel(logrus.DebugLevel)
-	log := logrus.StandardLogger().WithField("plugin", "refresh")
+	log := logrus.New().WithField("plugin", "all-plugins")
+	log.Logger.SetLevel(logrus.DebugLevel)
 
 	configAgent := &config.Agent{}
 	if err := configAgent.Start(o.configPath, ""); err != nil {
