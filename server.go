@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 
 	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
@@ -26,23 +25,6 @@ import (
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
-
-const pluginName = "refresh"
-
-var refreshRe = regexp.MustCompile(`(?mi)^/refresh\s*$`)
-
-func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
-	pluginHelp := &pluginhelp.PluginHelp{
-		Description: `The refresh plugin is used for refreshing status contexts in PRs. Useful in case GitHub breaks down.`,
-	}
-	pluginHelp.AddCommand(pluginhelp.Command{
-		Usage:       "/refresh",
-		Description: "Refresh status contexts on a PR.",
-		WhoCanUse:   "Anyone",
-		Examples:    []string{"/refresh"},
-	})
-	return pluginHelp, nil
-}
 
 type Server struct {
 	tokenGenerator func() []byte
@@ -53,19 +35,27 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.log.Error("will validade webhook")
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
+		s.log.Error("validate webhook failed")
 		return
 	}
-	fmt.Fprint(w, "Event received. Have a nice day.")
+	s.log.Error("validade webhook ok")
 
+	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		logrus.Errorf("Error parsing event. %v", err)
+		s.log.Errorf("Error parsing event. %v", err)
+		fmt.Fprint(w, "Something went wrong")
+		return
 	}
+
+	s.log.Info("handle event ok")
+	fmt.Fprint(w, "Event received. Have a nice day.")
 }
 
 func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
-	l := logrus.WithFields(
+	l := s.log.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
 			github.EventGUID: eventGUID,
@@ -74,24 +64,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 	switch eventType {
 	case "pull_request":
-
 		var p github.PullRequestEvent
-		// var a1 github.PullRequest
-		// var a2 gogh.PullRequestEvent
-		// var a3 gogh.PullRequest
-
-		// err = json.Unmarshal(payload, &p)
-		// pp.Println("github.PullRequestEvent", p, "error", err)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &a1)
-		// pp.Println("github.PullRequest", a1, "error", err)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &a2)
-		// pp.Println("gogh.PullRequestEvent", a2, "error", err)
-		// pp.Println(err)
-		// err = json.Unmarshal(payload, &a3)
-		// pp.Println("gogh.PullRequest", a3, "error", err)
-		// pp.Println(err)
 
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
@@ -107,20 +80,18 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		// 	}
 		// }()
 	default:
-		logrus.Debugf("skipping event of type %q", eventType)
+		s.log.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
-	pp.Println(p)
 	var (
 		org    = p.Repo.Owner.Login
 		repo   = p.Repo.Name
 		number = p.Number
 		title  = p.PullRequest.Title
 	)
-
 	pp.Println("title", title, "org", org, "repo", repo, "number", number)
 
 	l = l.WithFields(logrus.Fields{
@@ -129,20 +100,36 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		github.PrLogField:   number,
 		"title":             title,
 	})
+
+	s.log.Info("get labels")
 	labels, err := s.ghc.GetIssueLabels(org, repo, number)
 	if err != nil {
-		l.Error(err)
+		l.Errorf("failed to get labels", err)
 		return err
 	}
-	pp.Println(labels)
+	pp.Println("labels", labels)
 
 	if title == "test" {
+		s.log.Info("will add label")
 		err = s.ghc.AddLabel(org, repo, number, "invalid")
-	}
-	if err != nil {
-		l.Error(err)
-		return err
+		if err != nil {
+			l.Errorf("Failed to add label %v", err)
+			return err
+		}
 	}
 
 	return err
+}
+
+func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
+	pluginHelp := &pluginhelp.PluginHelp{
+		Description: `The refresh plugin is used for refreshing status contexts in PRs. Useful in case GitHub breaks down.`,
+	}
+	pluginHelp.AddCommand(pluginhelp.Command{
+		Usage:       "/jira-checker",
+		Description: "Check PR Title for Jira Tag",
+		WhoCanUse:   "Anyone",
+		Examples:    []string{"/jira-checker"},
+	})
+	return pluginHelp, nil
 }
