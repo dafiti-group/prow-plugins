@@ -35,13 +35,13 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.log.Error("will validade webhook")
+	s.log.Info("will validade webhook")
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
 		s.log.Error("validate webhook failed")
 		return
 	}
-	s.log.Error("validade webhook ok")
+	s.log.Info("validade webhook ok")
 
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
