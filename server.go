@@ -17,8 +17,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
-	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/test-infra/prow/config"
@@ -36,6 +36,10 @@ type Server struct {
 
 const (
 	InvalidLabel = "do-not-merge/no-jira-issue-on-title"
+)
+
+var (
+	titleRegex = regexp.MustCompile(`[A-Z]{1,}-\d+`)
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -72,15 +76,11 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 			return err
 		}
 
-		if err := s.handlePR(l, &p); err != nil {
-			s.log.WithFields(l.Data).WithError(err).Error("Refreshing github statuses failed.")
-		}
-
-		// go func() {
-		// 	if err := s.handlePR(l, &p); err != nil {
-		// 		s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
-		// 	}
-		// }()
+		go func() {
+			if err := s.handlePR(l, &p); err != nil {
+				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+			}
+		}()
 	default:
 		s.log.Debugf("skipping event of type %q", eventType)
 	}
@@ -88,19 +88,15 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
-	// Only consider newly merged PRs
-	if p.Action == github.PullRequestActionClosed {
-		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
-		return err
-	}
-
 	var (
 		org    = p.Repo.Owner.Login
 		repo   = p.Repo.Name
 		number = p.Number
 		title  = p.PullRequest.Title
+		action = p.Action
 	)
 
+	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
@@ -108,14 +104,37 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		"title":             title,
 	})
 
-	pp.Println(s.ghc)
-	if title == "test" {
+	l.Info("Handle PR")
+
+	// Only consider newly merged PRs
+	if action == github.PullRequestActionClosed {
+		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
+		return nil
+	}
+
+	// Only add for one repo for now
+	if repo != "prow-plugins" {
+		l.Infof("Repo not '%v' not allowed", repo)
+		return nil
+	}
+
+	jiraTag := titleRegex.FindString(title)
+
+	if jiraTag == "" {
 		err = s.ghc.AddLabel(org, repo, number, InvalidLabel)
 		if err != nil {
 			l.WithError(err).Error("failed to add label")
 			return err
 		}
-		l.Info("Ok")
+		return nil
+	}
+
+	// @TODO: Check Jira
+
+	err = s.ghc.RemoveLabel(org, repo, number, InvalidLabel)
+	if err != nil {
+		l.WithError(err).Error("failed to remove label")
+		return err
 	}
 
 	return err
