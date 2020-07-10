@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
+	"k8s.io/test-infra/prow/labels"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
 
@@ -97,7 +98,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		"title":             title,
 	})
 
-	err = s.ghc.AddLabel(org, repo, number, "invalid")
+	err = s.ghc.AddLabel(org, repo, number, labels.WorkInProgress)
 	if err != nil {
 		l.WithError(err).Error("failed to add label")
 		return err
