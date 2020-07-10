@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/test-infra/prow/config"
@@ -104,6 +105,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		"title":             title,
 	})
 
+	pp.Println(s.ghc)
 	if title == "test" {
 		err = s.ghc.AddLabel(org, repo, number, labels.WorkInProgress)
 		if err != nil {
