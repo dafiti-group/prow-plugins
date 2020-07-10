@@ -42,10 +42,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("validate webhook failed")
 		return
 	}
-	pp.Println("==========")
-	fmt.Println(string(payload))
-	pp.Println("==========")
-	s.log.Info("validade webhook ok")
+	s.log.Info("webhook ok")
 
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
