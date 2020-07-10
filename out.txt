@@ -1,2 +1,0 @@
-[31m[1m"[0m[31mtoken from generator[0m[31m[1m"[0m [31m[1m"[0m[31m123[0m[31m[1m"[0m
-[31m[1m"[0m[31mtitle[0m[31m[1m"[0m [31m[1m"[0m[31mDummy PR, do not merge[0m[31m[1m"[0m [31m[1m"[0m[31morg[0m[31m[1m"[0m [31m[1m"[0m[31mkubernetes[0m[31m[1m"[0m [31m[1m"[0m[31mrepo[0m[31m[1m"[0m [31m[1m"[0m[31mtest-infra[0m[31m[1m"[0m [31m[1m"[0m[31mnumber[0m[31m[1m"[0m [34m[1m2445[0m
