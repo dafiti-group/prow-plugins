@@ -84,6 +84,12 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	// Only consider newly merged PRs
+	if p.Action != github.PullRequestActionClosed && p.Action != github.PullRequestActionLabeled {
+		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
+		return err
+	}
+
 	var (
 		org    = p.Repo.Owner.Login
 		repo   = p.Repo.Name
@@ -98,12 +104,14 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		"title":             title,
 	})
 
-	err = s.ghc.AddLabel(org, repo, number, labels.WorkInProgress)
-	if err != nil {
-		l.WithError(err).Error("failed to add label")
-		return err
+	if title == "test" {
+		err = s.ghc.AddLabel(org, repo, number, labels.WorkInProgress)
+		if err != nil {
+			l.WithError(err).Error("failed to add label")
+			return err
+		}
+		l.Info("Ok")
 	}
-	l.Info("Ok")
 
 	return err
 }

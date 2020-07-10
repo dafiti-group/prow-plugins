@@ -40,7 +40,6 @@ type options struct {
 	configPath string
 	dryRun     bool
 	github     prowflagutil.GitHubOptions
-	prowURL    string
 
 	webhookSecretFile string
 }
