@@ -3,7 +3,7 @@ Copyright 2017 The Kubernetes Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -85,7 +85,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
 	// Only consider newly merged PRs
-	if p.Action != github.PullRequestActionClosed && p.Action != github.PullRequestActionLabeled {
+	if p.Action == github.PullRequestActionClosed {
 		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
 		return err
 	}
