@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 	"k8s.io/test-infra/prow/interrupts"
 
@@ -86,6 +87,8 @@ func main() {
 	}
 
 	secretAgent := &secret.Agent{}
+	pp.Println("webhookSecretFile", o.webhookSecretFile)
+	pp.Println("o.github.TokenPath", o.github.TokenPath)
 	if err := secretAgent.Start([]string{o.github.TokenPath, o.webhookSecretFile}); err != nil {
 		log.Errorf("Error starting secrets agent. %v", err)
 	}
