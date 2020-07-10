@@ -94,6 +94,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		number = p.Number
 		title  = p.PullRequest.Title
 		action = p.Action
+		msg    = "This pull request does not have a jira tag on the title"
 	)
 
 	// Setup Logger
@@ -126,6 +127,12 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 			l.WithError(err).Error("failed to add label")
 			return err
 		}
+
+		s.ghc.CreateComment(org, repo, number, msg)
+		if err != nil {
+			l.WithError(err).Error("failed to add label")
+			return err
+		}
 		return nil
 	}
 
@@ -136,7 +143,9 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		l.WithError(err).Error("failed to remove label")
 		return err
 	}
-
+	// cp.PruneComments(func(ic github.IssueComment) bool {
+	// 	return strings.Contains(ic.Body, blockedPathsBody)
+	// })
 	return err
 }
 
