@@ -3,7 +3,7 @@ Copyright 2017 The Kubernetes Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,38 +16,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
-	"text/template"
 
 	"github.com/sirupsen/logrus"
-	"k8s.io/apimachinery/pkg/labels"
 
-	prowapi "k8s.io/test-infra/prow/apis/prowjobs/v1"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
-	"k8s.io/test-infra/prow/github/report"
-	"k8s.io/test-infra/prow/pjutil"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
-
-const pluginName = "refresh"
-
-var refreshRe = regexp.MustCompile(`(?mi)^/refresh\s*$`)
-
-func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
-	pluginHelp := &pluginhelp.PluginHelp{
-		Description: `The refresh plugin is used for refreshing status contexts in PRs. Useful in case GitHub breaks down.`,
-	}
-	pluginHelp.AddCommand(pluginhelp.Command{
-		Usage:       "/refresh",
-		Description: "Refresh status contexts on a PR.",
-		WhoCanUse:   "Anyone",
-		Examples:    []string{"/refresh"},
-	})
-	return pluginHelp, nil
-}
 
 type Server struct {
 	tokenGenerator func() []byte
@@ -57,20 +34,34 @@ type Server struct {
 	log            *logrus.Entry
 }
 
+const (
+	InvalidLabel = "do-not-merge/no-jira-issue-on-title"
+)
+
+var (
+	titleRegex = regexp.MustCompile(`[A-Z]{1,}-\d+`)
+)
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
 	if !ok {
+		s.log.Error("validate webhook failed")
 		return
 	}
-	fmt.Fprint(w, "Event received. Have a nice day.")
 
+	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		logrus.WithError(err).Error("Error parsing event.")
+		s.log.WithError(err).Error("Error parsing event.")
+		fmt.Fprint(w, "Something went wrong")
+		return
 	}
+
+	s.log.Info("handle event ok")
+	fmt.Fprint(w, "Event received. Have a nice day.")
 }
 
-func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error {
-	l := logrus.WithFields(
+func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
+	l := s.log.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
 			github.EventGUID: eventGUID,
@@ -78,119 +69,88 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) error 
 	)
 
 	switch eventType {
-	case "issue_comment":
-		var ic github.IssueCommentEvent
-		if err := json.Unmarshal(payload, &ic); err != nil {
+	case "pull_request":
+		var p github.PullRequestEvent
+
+		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
 		}
+
 		go func() {
-			if err := s.handleIssueComment(l, ic); err != nil {
+			if err := s.handlePR(l, &p); err != nil {
 				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
 		}()
 	default:
-		logrus.Debugf("skipping event of type %q", eventType)
+		s.log.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
 }
 
-func (s *Server) handleIssueComment(l *logrus.Entry, ic github.IssueCommentEvent) error {
-	if !ic.Issue.IsPullRequest() || ic.Action != github.IssueCommentActionCreated || ic.Issue.State == "closed" {
-		return nil
-	}
+func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	var (
+		org    = p.Repo.Owner.Login
+		repo   = p.Repo.Name
+		number = p.Number
+		title  = p.PullRequest.Title
+		action = p.Action
+		msg    = "This pull request does not have a jira tag on the title"
+	)
 
-	org := ic.Repo.Owner.Login
-	repo := ic.Repo.Name
-	num := ic.Issue.Number
-
+	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
-		github.PrLogField:   num,
+		github.PrLogField:   number,
+		"title":             title,
 	})
 
-	if !refreshRe.MatchString(ic.Comment.Body) {
-		return nil
-	}
-	s.log.WithFields(l.Data).Info("Requested a status refresh.")
+	l.Info("Handle PR")
 
-	// TODO: Retries
-	resp, err := http.Get(s.prowURL + "/prowjobs.js")
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("status code not 2XX: %v", resp.Status)
-	}
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	var list struct {
-		PJs []prowapi.ProwJob `json:"items"`
-	}
-	if err := json.Unmarshal(data, &list); err != nil {
-		return fmt.Errorf("cannot unmarshal data from deck: %v", err)
-	}
-
-	pr, err := s.ghc.GetPullRequest(org, repo, num)
-	if err != nil {
-		return err
-	}
-
-	var presubmits []prowapi.ProwJob
-	for _, pj := range list.PJs {
-		if pj.Spec.Type != "presubmit" {
-			continue
-		}
-		if !pj.Spec.Report {
-			continue
-		}
-		if pj.Spec.Refs.Pulls[0].Number != num {
-			continue
-		}
-		if pj.Spec.Refs.Pulls[0].SHA != pr.Head.SHA {
-			continue
-		}
-		presubmits = append(presubmits, pj)
-	}
-
-	if len(presubmits) == 0 {
-		s.log.WithFields(l.Data).Info("No prowjobs found.")
+	// Only consider newly merged PRs
+	if action == github.PullRequestActionClosed {
+		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
 		return nil
 	}
 
-	jenkinsConfig := s.configAgent.Config().JenkinsOperators
-	kubeReport := s.configAgent.Config().Plank.ReportTemplateForRepo(&prowapi.Refs{Org: org, Repo: repo})
-	reportTypes := s.configAgent.Config().GitHubReporter.JobTypesToReport
-	for _, pj := range pjutil.GetLatestProwJobs(presubmits, prowapi.PresubmitJob) {
-		var reportTemplate *template.Template
-		switch pj.Spec.Agent {
-		case prowapi.KubernetesAgent:
-			reportTemplate = kubeReport
-		case prowapi.JenkinsAgent:
-			reportTemplate = s.reportForProwJob(pj, jenkinsConfig)
-		}
-		if reportTemplate == nil {
-			continue
+	// Only add for one repo for now
+	if repo != "prow-plugins" {
+		l.Infof("Repo not '%v' not allowed", repo)
+		return nil
+	}
+
+	jiraTag := titleRegex.FindString(title)
+
+	if jiraTag == "" {
+		err = s.ghc.AddLabel(org, repo, number, InvalidLabel)
+		if err != nil {
+			l.WithError(err).Error("failed to add label")
+			return err
 		}
 
-		s.log.WithFields(l.Data).Infof("Refreshing the status of job %q (pj: %s)", pj.Spec.Job, pj.ObjectMeta.Name)
-		if err := report.Report(s.ghc, reportTemplate, pj, reportTypes); err != nil {
-			s.log.WithError(err).WithFields(l.Data).Info("Failed report.")
+		s.ghc.CreateComment(org, repo, number, msg)
+		if err != nil {
+			l.WithError(err).Error("failed to add label")
+			return err
 		}
+		return nil
 	}
-	return nil
+
+	// @TODO: Check Jira
+
+	err = s.ghc.RemoveLabel(org, repo, number, InvalidLabel)
+	if err != nil {
+		l.WithError(err).Error("failed to remove label")
+		return err
+	}
+	// cp.PruneComments(func(ic github.IssueComment) bool {
+	// 	return strings.Contains(ic.Body, blockedPathsBody)
+	// })
+	return err
 }
 
-func (s *Server) reportForProwJob(pj prowapi.ProwJob, configs []config.JenkinsOperator) *template.Template {
-	for _, cfg := range configs {
-		if cfg.LabelSelector.Matches(labels.Set(pj.Labels)) {
-			return cfg.ReportTemplateForRepo(pj.Spec.Refs)
-		}
-	}
-	return nil
+func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
+	return &pluginhelp.PluginHelp{
+		Description: "The Jira checker plugin checks your PR name",
+	}, nil
 }

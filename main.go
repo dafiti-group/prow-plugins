@@ -19,9 +19,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -42,7 +40,6 @@ type options struct {
 	configPath string
 	dryRun     bool
 	github     prowflagutil.GitHubOptions
-	prowURL    string
 
 	webhookSecretFile string
 }
@@ -54,10 +51,6 @@ func (o *options) Validate() error {
 		}
 	}
 
-	if _, err := url.ParseRequestURI(o.prowURL); err != nil {
-		return fmt.Errorf("invalid -prow-url URI: %q", o.prowURL)
-	}
-
 	return nil
 }
 
@@ -66,9 +59,8 @@ func gatherOptions() options {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fs.IntVar(&o.port, "port", 8888, "Port to listen on.")
 	fs.StringVar(&o.configPath, "config-path", "/etc/config/config.yaml", "Path to config.yaml.")
-	fs.BoolVar(&o.dryRun, "dry-run", true, "Dry run for testing. Uses API tokens but does not mutate.")
+	fs.BoolVar(&o.dryRun, "dry-run", false, "Dry run for testing. Uses API tokens but does not mutate.")
 	fs.StringVar(&o.webhookSecretFile, "hmac-secret-file", "/etc/webhook/hmac", "Path to the file containing the GitHub HMAC secret.")
-	fs.StringVar(&o.prowURL, "prow-url", "", "Prow frontend URL.")
 	for _, group := range []flagutil.OptionGroup{&o.github} {
 		group.AddFlags(fs)
 	}
@@ -85,33 +77,33 @@ func main() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 	// TODO: Use global option from the prow config.
 	logrus.SetLevel(logrus.DebugLevel)
-	log := logrus.StandardLogger().WithField("plugin", "refresh")
+	log := logrus.New().WithField("plugin", "all-plugins")
+	log.Logger.SetLevel(logrus.DebugLevel)
 
 	configAgent := &config.Agent{}
 	if err := configAgent.Start(o.configPath, ""); err != nil {
-		log.WithError(err).Fatal("Error starting config agent.")
+		log.Errorf("Error starting config agent. %v", err)
 	}
 
 	secretAgent := &secret.Agent{}
 	if err := secretAgent.Start([]string{o.github.TokenPath, o.webhookSecretFile}); err != nil {
-		logrus.WithError(err).Fatal("Error starting secrets agent.")
+		log.Errorf("Error starting secrets agent. %v", err)
 	}
 
 	githubClient, err := o.github.GitHubClient(secretAgent, o.dryRun)
 	if err != nil {
-		logrus.WithError(err).Fatal("Error getting GitHub client.")
+		log.Errorf("Error getting GitHub client. %v", err)
 	}
 
 	serv := &Server{
 		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
-		prowURL:        o.prowURL,
 		configAgent:    configAgent,
 		ghc:            githubClient,
 		log:            log,
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", serv)
+	mux.Handle("/jira-checker", serv)
 	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()

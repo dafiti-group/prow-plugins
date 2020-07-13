@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 1
+  labels:
+    app: prow-plugins
+  name: prow-plugins
+  namespace: prow
+spec:
+  selector:
+    matchLabels:
+      app: prow-plugins
+  template:
+    metadata:
+      labels:
+        app: prow-plugins
+    spec:
+      containers:
+      - args:
+        - --config-path=/etc/config/config.yaml
+        - --hmac-secret-file=/etc/webhook/hmac
+        - --github-endpoint=http://ghproxy
+        - --github-endpoint=https://api.github.com
+        - --github-token-path=/etc/github/oauth
+        image: quay.io/dafiti/prow-plugins:develop
+        imagePullPolicy: Always
+        name: prow-plugins
+        ports:
+        - containerPort: 8888
+          name: http
+          protocol: TCP
+        resources: {}
+        volumeMounts:
+        - mountPath: /etc/webhook
+          name: hmac
+          readOnly: true
+        - mountPath: /etc/config
+          name: config
+          readOnly: true
+        - mountPath: /etc/github
+          name: oauth
+          readOnly: true
+      restartPolicy: Always
+      volumes:
+      - name: hmac
+        secret:
+          defaultMode: 420
+          secretName: hmac-token
+      - configMap:
+          defaultMode: 420
+          name: config
+        name: config
+      - name: oauth
+        secret:
+          defaultMode: 420
+          secretName: github-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prow-plugins
+  namespace: prow
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8888
+  selector:
+    app: prow-plugins
+  type: NodePort
