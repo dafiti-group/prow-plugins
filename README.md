@@ -1,3 +1,5 @@
+[![Docker Repository on Quay](https://quay.io/repository/dafiti/prow-plugins/status "Docker Repository on Quay")](https://quay.io/repository/dafiti/prow-plugins)
+
 # prow-plugins
 
 ## Running
