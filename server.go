@@ -128,11 +128,11 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 			return err
 		}
 
-		s.ghc.CreateComment(org, repo, number, msg)
-		if err != nil {
-			l.WithError(err).Error("failed to add label")
-			return err
-		}
+		// s.ghc.CreateComment(org, repo, number, msg)
+		// if err != nil {
+		// 	l.WithError(err).Error("failed to add label")
+		// 	return err
+		// }
 		return nil
 	}
 
