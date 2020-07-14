@@ -57,6 +57,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 			github.EventGUID: eventGUID,
 		},
 	)
+	l.Info("Event received")
 
 	switch eventType {
 	case "pull_request":

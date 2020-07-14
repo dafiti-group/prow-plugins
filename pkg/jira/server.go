@@ -94,7 +94,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		number = p.Number
 		title  = p.PullRequest.Title
 		action = p.Action
-		msg    = "This pull request does not have a jira tag on the title"
+		// msg    = "This pull request does not have a jira tag on the title"
 	)
 
 	// Setup Logger
