@@ -27,6 +27,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"k8s.io/test-infra/prow/interrupts"
 
+	"github.com/dafiti-group/prow-plugins/pkg/jira"
+	"github.com/dafiti-group/prow-plugins/pkg/teams"
 	"k8s.io/test-infra/pkg/flagutil"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/config/secret"
@@ -95,7 +97,14 @@ func main() {
 		log.Errorf("Error getting GitHub client. %v", err)
 	}
 
-	serv := &Server{
+	jiraServer := &jira.Server{
+		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		configAgent:    configAgent,
+		ghc:            githubClient,
+		log:            log,
+	}
+
+	teamsServer := &teams.Server{
 		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		configAgent:    configAgent,
 		ghc:            githubClient,
@@ -103,8 +112,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/jira-checker", serv)
-	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
+	mux.Handle("/jira-checker", jiraServer)
+	mux.Handle("/teams-sync", teamsServer)
+	externalplugins.ServeExternalPluginHelp(mux, log, jira.HelpProvider)
+	externalplugins.ServeExternalPluginHelp(mux, log, teams.HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
 	interrupts.ListenAndServe(httpServer, 5*time.Second)
