@@ -24,14 +24,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dafiti-group/prow-plugins/pkg/jira"
+	"github.com/dafiti-group/prow-plugins/pkg/teams"
 	"github.com/sirupsen/logrus"
-	"k8s.io/test-infra/prow/interrupts"
-
 	"k8s.io/test-infra/pkg/flagutil"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/config/secret"
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
-	"k8s.io/test-infra/prow/pluginhelp/externalplugins"
+	"k8s.io/test-infra/prow/git/v2"
+	"k8s.io/test-infra/prow/interrupts"
 )
 
 type options struct {
@@ -95,16 +96,36 @@ func main() {
 		log.Errorf("Error getting GitHub client. %v", err)
 	}
 
-	serv := &Server{
-		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
-		configAgent:    configAgent,
-		ghc:            githubClient,
-		log:            log,
+	gitClient, err := o.github.GitClient(secretAgent, o.dryRun)
+	if err != nil {
+		logrus.WithError(err).Fatal("Error getting Git client.")
+	}
+	interrupts.OnInterrupt(func() {
+		if err := gitClient.Clean(); err != nil {
+			logrus.WithError(err).Error("Could not clean up git client cache.")
+		}
+	})
+
+	jiraServer := &jira.Server{
+		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		ConfigAgent:    configAgent,
+		Ghc:            githubClient,
+		Log:            log.WithField("plugin", "jira"),
+	}
+
+	teamsServer := &teams.Server{
+		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		ConfigAgent:    configAgent,
+		Gc:             git.ClientFactoryFrom(gitClient),
+		Ghc:            githubClient,
+		Log:            log.WithField("plugin", "teams"),
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/jira-checker", serv)
-	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
+	mux.Handle("/jira-checker", jiraServer)
+	mux.Handle("/teams-sync", teamsServer)
+	// externalplugins.ServeExternalPluginHelp(mux, log, jira.HelpProvider)
+	// externalplugins.ServeExternalPluginHelp(mux, log, teams.HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
 	interrupts.ListenAndServe(httpServer, 5*time.Second)

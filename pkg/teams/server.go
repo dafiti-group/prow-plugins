@@ -11,65 +11,78 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package teams
 
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"regexp"
+	"path/filepath"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
+	"gopkg.in/yaml.v2"
 	"k8s.io/test-infra/prow/config"
+	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
 
 type Server struct {
-	tokenGenerator func() []byte
-	prowURL        string
-	configAgent    *config.Agent
-	ghc            github.Client
-	log            *logrus.Entry
+	TokenGenerator func() []byte
+	Gc             git.ClientFactory
+	ConfigAgent    *config.Agent
+	Ghc            github.Client
+	Log            *logrus.Entry
 }
 
-const (
-	InvalidLabel = "do-not-merge/no-jira-issue-on-title"
-)
+type Teams struct {
+	Teams []Team `yaml:"teams"`
+}
+
+type Team struct {
+	Login string `yaml:"login"`
+}
 
 var (
-	titleRegex = regexp.MustCompile(`[A-Z]{1,}-\d+`)
+	targetBranch = "master"
+	fileName     = "TEAMS"
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
+	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.TokenGenerator)
 	if !ok {
-		s.log.Error("validate webhook failed")
+		s.Log.Error("validate webhook failed")
 		return
 	}
 
+	pp.Println("==========")
+	fmt.Println(string(payload))
+	pp.Println("==========")
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		s.log.WithError(err).Error("Error parsing event.")
+		s.Log.WithError(err).Error("Error parsing event.")
 		fmt.Fprint(w, "Something went wrong")
 		return
 	}
 
-	s.log.Info("handle event ok")
+	s.Log.Info("handle event ok")
 	fmt.Fprint(w, "Event received. Have a nice day.")
 }
 
 func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
-	l := s.log.WithFields(
+	l := s.Log.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
 			github.EventGUID: eventGUID,
 		},
 	)
+	l.Info("Event received")
 
 	switch eventType {
-	case "pull_request":
+	case "push":
 		var p github.PullRequestEvent
 
 		if err := json.Unmarshal(payload, &p); err != nil {
@@ -78,11 +91,11 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 		go func() {
 			if err := s.handlePR(l, &p); err != nil {
-				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
 		}()
 	default:
-		s.log.Debugf("skipping event of type %q", eventType)
+		s.Log.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
 }
@@ -94,7 +107,6 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		number = p.Number
 		title  = p.PullRequest.Title
 		action = p.Action
-		msg    = "This pull request does not have a jira tag on the title"
 	)
 
 	// Setup Logger
@@ -102,55 +114,54 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
 		github.PrLogField:   number,
+		"action":            action,
 		"title":             title,
 	})
 
 	l.Info("Handle PR")
 
-	// Only consider newly merged PRs
-	if action == github.PullRequestActionClosed {
-		l.Infof("Pull Request Action '%v' not aplicable", p.Action)
-		return nil
-	}
-
-	// Only add for one repo for now
-	if repo != "prow-plugins" {
-		l.Infof("Repo not '%v' not allowed", repo)
-		return nil
-	}
-
-	jiraTag := titleRegex.FindString(title)
-
-	if jiraTag == "" {
-		err = s.ghc.AddLabel(org, repo, number, InvalidLabel)
-		if err != nil {
-			l.WithError(err).Error("failed to add label")
-			return err
-		}
-
-		// s.ghc.CreateComment(org, repo, number, msg)
-		// if err != nil {
-		// 	l.WithError(err).Error("failed to add label")
-		// 	return err
-		// }
-		return nil
-	}
-
-	// @TODO: Check Jira
-
-	err = s.ghc.RemoveLabel(org, repo, number, InvalidLabel)
-	if err != nil {
-		l.WithError(err).Error("failed to remove label")
+	if err = s.handle(org, repo, targetBranch); err != nil {
+		s.Log.Error(err)
 		return err
 	}
-	// cp.PruneComments(func(ic github.IssueComment) bool {
-	// 	return strings.Contains(ic.Body, blockedPathsBody)
-	// })
+
 	return err
+}
+
+func (s *Server) handle(org, repo, targetBranch string) error {
+	// Clone the repo, checkout the target branch.
+	r, err := s.Gc.ClientFor(org, repo)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := r.Clean(); err != nil {
+			s.Log.WithError(err).Error("Error cleaning up repo.")
+		}
+	}()
+	if err := r.Checkout(targetBranch); err != nil {
+		resp := fmt.Sprintf("cannot checkout %s: %v", targetBranch, err)
+		s.Log.Warningf(resp)
+		return err
+	}
+	teams := &Teams{}
+	path := filepath.Join(r.Directory(), fileName)
+	yamlFile, err := ioutil.ReadFile(path)
+	if err != nil {
+		s.Log.Error(err)
+	}
+	err = yaml.Unmarshal(yamlFile, teams)
+	if err != nil {
+		s.Log.Error(err)
+	}
+
+	pp.Println(teams)
+
+	return nil
 }
 
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	return &pluginhelp.PluginHelp{
-		Description: "The Jira checker plugin checks your PR name",
+		Description: "Syncs TEAMS file declaration with github teams",
 	}, nil
 }
