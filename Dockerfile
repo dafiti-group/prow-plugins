@@ -10,11 +10,10 @@ COPY go.sum go.sum
 RUN go mod download
 
 COPY pkg/ pkg/
-# COPY cmd/ cmd/
-COPY . .
+COPY cmd/ cmd/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -o manager .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -o manager ./cmd
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

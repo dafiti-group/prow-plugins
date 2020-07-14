@@ -24,15 +24,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"k8s.io/test-infra/prow/interrupts"
-
 	"github.com/dafiti-group/prow-plugins/pkg/jira"
 	"github.com/dafiti-group/prow-plugins/pkg/teams"
+	"github.com/sirupsen/logrus"
 	"k8s.io/test-infra/pkg/flagutil"
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/config/secret"
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
+	"k8s.io/test-infra/prow/interrupts"
 	"k8s.io/test-infra/prow/pluginhelp/externalplugins"
 )
 
