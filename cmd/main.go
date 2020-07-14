@@ -32,7 +32,6 @@ import (
 	"k8s.io/test-infra/prow/config/secret"
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
 	"k8s.io/test-infra/prow/interrupts"
-	"k8s.io/test-infra/prow/pluginhelp/externalplugins"
 )
 
 type options struct {
@@ -97,24 +96,24 @@ func main() {
 	}
 
 	jiraServer := &jira.Server{
-		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
-		configAgent:    configAgent,
-		ghc:            githubClient,
-		log:            log,
+		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		ConfigAgent:    configAgent,
+		Ghc:            githubClient,
+		Log:            log,
 	}
 
 	teamsServer := &teams.Server{
-		tokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
-		configAgent:    configAgent,
-		ghc:            githubClient,
-		log:            log,
+		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		ConfigAgent:    configAgent,
+		Ghc:            githubClient,
+		Log:            log,
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/jira-checker", jiraServer)
 	mux.Handle("/teams-sync", teamsServer)
-	externalplugins.ServeExternalPluginHelp(mux, log, jira.HelpProvider)
-	externalplugins.ServeExternalPluginHelp(mux, log, teams.HelpProvider)
+	// externalplugins.ServeExternalPluginHelp(mux, log, jira.HelpProvider)
+	// externalplugins.ServeExternalPluginHelp(mux, log, teams.HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
 	interrupts.ListenAndServe(httpServer, 5*time.Second)

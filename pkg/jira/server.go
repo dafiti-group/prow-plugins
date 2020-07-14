@@ -27,11 +27,10 @@ import (
 )
 
 type Server struct {
-	tokenGenerator func() []byte
-	prowURL        string
-	configAgent    *config.Agent
-	ghc            github.Client
-	log            *logrus.Entry
+	TokenGenerator func() []byte
+	ConfigAgent    *config.Agent
+	Ghc            github.Client
+	Log            *logrus.Entry
 }
 
 const (
@@ -43,25 +42,25 @@ var (
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.tokenGenerator)
+	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.TokenGenerator)
 	if !ok {
-		s.log.Error("validate webhook failed")
+		s.Log.Error("validate webhook failed")
 		return
 	}
 
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
-		s.log.WithError(err).Error("Error parsing event.")
+		s.Log.WithError(err).Error("Error parsing event.")
 		fmt.Fprint(w, "Something went wrong")
 		return
 	}
 
-	s.log.Info("handle event ok")
+	s.Log.Info("handle event ok")
 	fmt.Fprint(w, "Event received. Have a nice day.")
 }
 
 func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
-	l := s.log.WithFields(
+	l := s.Log.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
 			github.EventGUID: eventGUID,
@@ -78,11 +77,11 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 		go func() {
 			if err := s.handlePR(l, &p); err != nil {
-				s.log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
 		}()
 	default:
-		s.log.Debugf("skipping event of type %q", eventType)
+		s.Log.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
 }
@@ -122,7 +121,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	jiraTag := titleRegex.FindString(title)
 
 	if jiraTag == "" {
-		err = s.ghc.AddLabel(org, repo, number, InvalidLabel)
+		err = s.Ghc.AddLabel(org, repo, number, InvalidLabel)
 		if err != nil {
 			l.WithError(err).Error("failed to add label")
 			return err
@@ -138,7 +137,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 
 	// @TODO: Check Jira
 
-	err = s.ghc.RemoveLabel(org, repo, number, InvalidLabel)
+	err = s.Ghc.RemoveLabel(org, repo, number, InvalidLabel)
 	if err != nil {
 		l.WithError(err).Error("failed to remove label")
 		return err
