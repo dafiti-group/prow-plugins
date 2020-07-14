@@ -31,6 +31,7 @@ import (
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/config/secret"
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
+	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/interrupts"
 )
 
@@ -95,18 +96,29 @@ func main() {
 		log.Errorf("Error getting GitHub client. %v", err)
 	}
 
+	gitClient, err := o.github.GitClient(secretAgent, o.dryRun)
+	if err != nil {
+		logrus.WithError(err).Fatal("Error getting Git client.")
+	}
+	interrupts.OnInterrupt(func() {
+		if err := gitClient.Clean(); err != nil {
+			logrus.WithError(err).Error("Could not clean up git client cache.")
+		}
+	})
+
 	jiraServer := &jira.Server{
 		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		ConfigAgent:    configAgent,
 		Ghc:            githubClient,
-		Log:            log,
+		Log:            log.WithField("plugin", "jira"),
 	}
 
 	teamsServer := &teams.Server{
 		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		ConfigAgent:    configAgent,
+		Gc:             git.ClientFactoryFrom(gitClient),
 		Ghc:            githubClient,
-		Log:            log,
+		Log:            log.WithField("plugin", "teams"),
 	}
 
 	mux := http.NewServeMux()
