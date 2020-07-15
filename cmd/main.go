@@ -33,6 +33,8 @@ import (
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
 	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/interrupts"
+	"k8s.io/test-infra/prow/pluginhelp"
+	"k8s.io/test-infra/prow/pluginhelp/externalplugins"
 )
 
 type options struct {
@@ -124,9 +126,16 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/jira-checker", jiraServer)
 	mux.Handle("/teams-sync", teamsServer)
-	// externalplugins.ServeExternalPluginHelp(mux, log, jira.HelpProvider)
-	// externalplugins.ServeExternalPluginHelp(mux, log, teams.HelpProvider)
+	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
 	interrupts.ListenAndServe(httpServer, 5*time.Second)
+}
+
+func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
+	pluginHelp := &pluginhelp.PluginHelp{
+		Description: `This is a collection of dafiti plugins`,
+	}
+	pluginHelp.AddCommand(teams.HelpProvider())
+	return pluginHelp, nil
 }
