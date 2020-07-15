@@ -19,8 +19,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"strings"
 
-	"github.com/k0kubun/pp"
+	"github.com/creasty/defaults"
 	"github.com/sirupsen/logrus"
 
 	"gopkg.in/yaml.v2"
@@ -44,13 +45,15 @@ type Base struct {
 }
 
 type Team struct {
-	Login string `yaml:"login"`
+	Login      string `yaml:"login"`
+	Maintainer bool   `default:"true" yaml:"maintainer"`
 }
 
 var (
 	fileName      = "TEAMS"
-	succesMessage = "The Teams were synced"
-	failMessage   = "Failed to sync Teams: %v"
+	succesMessage = "Teams were synced"
+	failMessage   = "Failed to sync Teams: `%v`"
+	usersDiffMsg  = "Some users are on the organization but are not declared on the file, please remove them manualy or update the file: %v"
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,10 +85,6 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		},
 	)
 	l.Info("Event received")
-
-	pp.Println("=======")
-	fmt.Println(string(payload))
-	pp.Println("=======")
 
 	switch eventType {
 	case "pull_request":
@@ -136,7 +135,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	}
 
 	//
-	if err = s.handle(org, repo, p.PullRequest.Base.Ref); err != nil {
+	if err = s.handle(org, repo, p.PullRequest.Head.Ref); err != nil {
 		s.Log.Error(err)
 		//
 		if err = s.Ghc.CreateComment(org, repo, number, fmt.Sprintf(failMessage, err.Error())); err != nil {
@@ -157,7 +156,8 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 
 func shouldPrune(botName string) func(github.IssueComment) bool {
 	return func(ic github.IssueComment) bool {
-		return github.NormLogin(botName) == github.NormLogin(ic.User.Login)
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) &&
+			(strings.Contains(ic.Body, succesMessage) || strings.ContainsAny(ic.Body, failMessage))
 	}
 }
 
@@ -199,31 +199,66 @@ func (s *Server) handle(org, repo, commit string) error {
 		return err
 	}
 
+	diffMembersList := make(map[string][]string)
 	//
 	for _, a := range base.Teams {
 		for teamName, teamMembers := range a {
+			var teamMembersList []Team
 			//
 			team, err := s.Ghc.GetTeamBySlug(teamName, org)
 			if err != nil {
-				s.Log.Errorf("team %v not found", teamName)
-				continue
+				s.Log.WithError(err).Errorf("team %v not found", teamName)
+				return err
 			}
 
 			//
 			for _, teamMember := range teamMembers {
-				if err := s.sync(team, org, teamName, teamMember); err != nil {
+				defaults.Set(teamMember)
+				teamMembersList = append(teamMembersList, teamMember)
+				if err := s.updateMembership(team, org, teamName, teamMember); err != nil {
 					s.Log.WithError(err).Error("failed to sync")
 					return err
 				}
 			}
+
+			//
+			actualMembers, err := s.Ghc.ListTeamMembers(team.ID, "")
+			if err != nil {
+				s.Log.WithError(err).Error("failed geting team members")
+				return err
+			}
+
+			//
+			diff := getDiff(actualMembers, teamMembersList)
+			diffMembersList[team.Slug] = diff
 		}
+	}
+
+	if len(diffMembersList) != 0 {
+		err = fmt.Errorf(usersDiffMsg, diffMembersList)
+		s.Log.Error(err)
+		return err
 	}
 
 	return nil
 }
+func getDiff(currentUsers []github.TeamMember, fileUsers []Team) []string {
+	mb := make(map[string]struct{}, len(fileUsers))
+	for _, x := range fileUsers {
+		mb[x.Login] = struct{}{}
+	}
+
+	var diff []string
+	for _, x := range currentUsers {
+		if _, found := mb[x.Login]; !found {
+			diff = append(diff, x.Login)
+		}
+	}
+	return diff
+}
 
 //
-func (s *Server) sync(team *github.Team, org string, teamName string, teamMember Team) (err error) {
+func (s *Server) updateMembership(team *github.Team, org string, teamName string, teamMember Team) (err error) {
 	isMember, err := s.Ghc.IsMember(org, teamMember.Login)
 	if err != nil {
 		return err
@@ -236,7 +271,7 @@ func (s *Server) sync(team *github.Team, org string, teamName string, teamMember
 	}
 
 	// Add Member
-	_, err = s.Ghc.UpdateTeamMembership(team.ID, teamMember.Login, true)
+	_, err = s.Ghc.UpdateTeamMembership(team.ID, teamMember.Login, teamMember.Maintainer)
 
 	return err
 }
