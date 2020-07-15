@@ -82,6 +82,7 @@ func main() {
 	logrus.SetLevel(logrus.DebugLevel)
 	log := logrus.New().WithField("plugin", "all-plugins")
 	log.Logger.SetLevel(logrus.DebugLevel)
+	log.Logger.SetFormatter(&logrus.JSONFormatter{})
 
 	configAgent := &config.Agent{}
 	if err := configAgent.Start(o.configPath, ""); err != nil {
