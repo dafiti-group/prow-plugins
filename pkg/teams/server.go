@@ -19,8 +19,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
-	"strings"
 
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"gopkg.in/yaml.v2"
@@ -48,8 +48,9 @@ type Team struct {
 }
 
 var (
-	fileName = "TEAMS"
-	message  = "The Teams were synced"
+	fileName      = "TEAMS"
+	succesMessage = "The Teams were synced"
+	failMessage   = "Failed to sync Teams: %v"
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -82,19 +83,11 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	)
 	l.Info("Event received")
 
+	pp.Println("=======")
+	fmt.Println(string(payload))
+	pp.Println("=======")
+
 	switch eventType {
-	case "push":
-		var p github.PushEvent
-
-		if err := json.Unmarshal(payload, &p); err != nil {
-			return err
-		}
-
-		go func() {
-			if err := s.handlePUSH(l, &p); err != nil {
-				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
-			}
-		}()
 	case "pull_request":
 		var p github.PullRequestEvent
 
@@ -111,28 +104,6 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		s.Log.Debugf("skipping event of type %q", eventType)
 	}
 	return nil
-}
-
-func (s *Server) handlePUSH(l *logrus.Entry, p *github.PushEvent) (err error) {
-	var (
-		org  = p.Repo.Owner.Login
-		repo = p.Repo.Name
-	)
-
-	// Setup Logger
-	l = l.WithFields(logrus.Fields{
-		github.OrgLogField:  org,
-		github.RepoLogField: repo,
-	})
-
-	l.Info("Handle PR")
-
-	if err = s.handle(org, repo, p.After); err != nil {
-		s.Log.Error(err)
-		return err
-	}
-
-	return err
 }
 
 func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
@@ -152,12 +123,6 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	l.Info("Handle PR")
 
 	//
-	if err = s.handle(org, repo, p.PullRequest.Base.Ref); err != nil {
-		s.Log.Error(err)
-		return err
-	}
-
-	//
 	botName, err := s.Ghc.BotName()
 	if err != nil {
 		s.Log.WithError(err).Error("failed getting botName")
@@ -171,8 +136,19 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	}
 
 	//
-	if err = s.Ghc.CreateComment(org, repo, number, message); err != nil {
-		s.Log.WithError(err).Error("failed to create comment")
+	if err = s.handle(org, repo, p.PullRequest.Base.Ref); err != nil {
+		s.Log.Error(err)
+		//
+		if err = s.Ghc.CreateComment(org, repo, number, fmt.Sprintf(failMessage, err.Error())); err != nil {
+			s.Log.WithError(err).Error("failed to create comment on handle")
+			return err
+		}
+		return err
+	}
+
+	//
+	if err = s.Ghc.CreateComment(org, repo, number, succesMessage); err != nil {
+		s.Log.WithError(err).Error("failed to create comment after handle")
 		return err
 	}
 
@@ -181,8 +157,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 
 func shouldPrune(botName string) func(github.IssueComment) bool {
 	return func(ic github.IssueComment) bool {
-		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) &&
-			strings.Contains(ic.Body, message)
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login)
 	}
 }
 
