@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"gopkg.in/yaml.v2"
@@ -38,16 +37,8 @@ type Server struct {
 	Log            *logrus.Entry
 }
 
-type Teams struct {
-	Teams []Team `yaml:"teams"`
-}
-
-type Team struct {
-	Login string `yaml:"login"`
-}
-
 var (
-	targetBranch = "master"
+	targetBranch = "feature/automated-merge-proposal"
 	fileName     = "TEAMS"
 )
 
@@ -58,9 +49,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pp.Println("==========")
-	fmt.Println(string(payload))
-	pp.Println("==========")
 	// Respond with
 	if err := s.handleEvent(eventType, eventGUID, payload); err != nil {
 		s.Log.WithError(err).Error("Error parsing event.")
@@ -83,7 +71,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 	switch eventType {
 	case "push":
-		var p github.PullRequestEvent
+		var p github.PushEvent
 
 		if err := json.Unmarshal(payload, &p); err != nil {
 			return err
@@ -100,27 +88,21 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	return nil
 }
 
-func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+func (s *Server) handlePR(l *logrus.Entry, p *github.PushEvent) (err error) {
 	var (
-		org    = p.Repo.Owner.Login
-		repo   = p.Repo.Name
-		number = p.Number
-		title  = p.PullRequest.Title
-		action = p.Action
+		org  = p.Repo.Owner.Login
+		repo = p.Repo.Name
 	)
 
 	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
-		github.PrLogField:   number,
-		"action":            action,
-		"title":             title,
 	})
 
 	l.Info("Handle PR")
 
-	if err = s.handle(org, repo, targetBranch); err != nil {
+	if err = s.handle(org, repo, p); err != nil {
 		s.Log.Error(err)
 		return err
 	}
@@ -128,36 +110,98 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	return err
 }
 
-func (s *Server) handle(org, repo, targetBranch string) error {
+// teams:
+//   - appLatam:
+// 	   - login: vrenan
+
+type Base struct {
+	ApiVersion string              `yaml:"apiVersion"`
+	Teams      []map[string][]Team `yaml:"teams"`
+}
+
+type Team struct {
+	Login string `yaml:"login"`
+}
+
+func (s *Server) handle(org, repo string, p *github.PushEvent) error {
 	// Clone the repo, checkout the target branch.
 	r, err := s.Gc.ClientFor(org, repo)
 	if err != nil {
 		return err
 	}
+
+	//
 	defer func() {
 		if err := r.Clean(); err != nil {
 			s.Log.WithError(err).Error("Error cleaning up repo.")
 		}
 	}()
-	if err := r.Checkout(targetBranch); err != nil {
-		resp := fmt.Sprintf("cannot checkout %s: %v", targetBranch, err)
-		s.Log.Warningf(resp)
+
+	//
+	if err := r.Checkout(p.After); err != nil {
+		s.Log.WithError(err).Warningf("cannot checkout %s", p.After)
 		return err
 	}
-	teams := &Teams{}
+
+	//
+	base := &Base{}
 	path := filepath.Join(r.Directory(), fileName)
+
+	//
 	yamlFile, err := ioutil.ReadFile(path)
 	if err != nil {
 		s.Log.Error(err)
+		return err
 	}
-	err = yaml.Unmarshal(yamlFile, teams)
+
+	//
+	err = yaml.Unmarshal(yamlFile, base)
 	if err != nil {
 		s.Log.Error(err)
+		return err
 	}
 
-	pp.Println(teams)
+	//
+	for _, a := range base.Teams {
+		for teamName, teamMembers := range a {
+			//
+			team, err := s.Ghc.GetTeamBySlug(teamName, org)
+			if err != nil {
+				s.Log.Errorf("team %v not found", teamName)
+				continue
+			}
+
+			//
+			for _, teamMember := range teamMembers {
+				if err := s.sync(team, org, teamName, teamMember); err != nil {
+					s.Log.WithError(err).Error("failed to sync")
+					return err
+				}
+			}
+		}
+	}
 
 	return nil
+}
+
+//
+func (s *Server) sync(team *github.Team, org string, teamName string, teamMember Team) (err error) {
+	// @TODO: Sync with github
+	isMember, err := s.Ghc.IsMember(org, teamMember.Login)
+	if err != nil {
+		return err
+	}
+
+	//
+	if isMember {
+		s.Log.Infof("%v is already member of %v", teamMember.Login, team.Name)
+		return err
+	}
+
+	// Add Member
+	_, err = s.Ghc.UpdateTeamMembership(team.ID, teamMember.Login, true)
+
+	return err
 }
 
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
