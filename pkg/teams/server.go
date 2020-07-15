@@ -222,8 +222,8 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 		return err
 	}
 
-	// If is not approved and and is a command comment on PR
-	if state != github.ReviewStateApproved && isCMD {
+	// If is not approved and and is valid command comment on PR
+	if state != github.ReviewStateApproved && refreshRe.MatchString(body) {
 		if err = s.Ghc.CreateComment(org, repo, number, PRNotApproved); err != nil {
 			l.WithError(err).Error("failed to create comment on handle")
 			return err
@@ -238,7 +238,7 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 
 	// Skip if trigger false
 	if !refreshRe.MatchString(body) && isCMD {
-		s.Log.Info("will not trigger")
+		s.Log.Infof("will not trigger for %v", body)
 		return nil
 	}
 
