@@ -106,7 +106,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 		go func() {
 			if err := s.handleCommentEvent(l, &e); err != nil {
-				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+				l.WithError(err).WithFields(l.Data).Info("issue comment failed.")
 			}
 		}()
 	case "pull_request_review":
@@ -118,7 +118,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 		go func() {
 			if err := s.handleReviewEvent(l, &e); err != nil {
-				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+				l.WithError(err).WithFields(l.Data).Info("pull request review  failed.")
 			}
 		}()
 	case "pull_request":
@@ -130,7 +130,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 		go func() {
 			if err := s.handlePR(l, &p); err != nil {
-				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+				s.Log.WithError(err).WithFields(l.Data).Info("Pull request event failed.")
 			}
 		}()
 	default:
@@ -141,10 +141,10 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 
 func (s *Server) handleCommentEvent(l *logrus.Entry, e *github.IssueCommentEvent) (err error) {
 	var (
-		org     = e.Repo.Owner.Login
-		repo    = e.Repo.Name
-		number  = e.Issue.Number
-		trigger = refreshRe.MatchString(e.Comment.Body)
+		org    = e.Repo.Owner.Login
+		repo   = e.Repo.Name
+		number = e.Issue.Number
+		body   = e.Comment.Body
 	)
 
 	pr, err := s.Ghc.GetPullRequest(org, repo, number)
@@ -155,7 +155,7 @@ func (s *Server) handleCommentEvent(l *logrus.Entry, e *github.IssueCommentEvent
 	commit := pr.Head.Ref
 	state := github.ReviewState(strings.ToUpper(string(pr.State)))
 
-	err = s.handle(l, org, repo, commit, trigger, true, number, state)
+	err = s.handle(l, org, repo, commit, body, true, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on handle comment")
 		return err
@@ -171,7 +171,7 @@ func (s *Server) handleReviewEvent(l *logrus.Entry, e *github.ReviewEvent) (err 
 		state  = github.ReviewState(strings.ToUpper(string(e.PullRequest.State)))
 		commit = e.PullRequest.Head.Ref
 	)
-	err = s.handle(l, org, repo, commit, true, false, number, state)
+	err = s.handle(l, org, repo, commit, "", false, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on pull request review")
 		return err
@@ -187,7 +187,7 @@ func (s *Server) handlePR(l *logrus.Entry, e *github.PullRequestEvent) (err erro
 		state  = github.ReviewState(strings.ToUpper(string(e.PullRequest.State)))
 		commit = e.PullRequest.Head.Ref
 	)
-	err = s.handle(l, org, repo, commit, true, false, number, state)
+	err = s.handle(l, org, repo, commit, "", false, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on pull request")
 		return err
@@ -195,7 +195,7 @@ func (s *Server) handlePR(l *logrus.Entry, e *github.PullRequestEvent) (err erro
 	return err
 }
 
-func (s *Server) handle(l *logrus.Entry, org, repo, commit string, trigger bool, isCMD bool, number int, state github.ReviewState) (err error) {
+func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD bool, number int, state github.ReviewState) (err error) {
 	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
@@ -203,7 +203,7 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit string, trigger bool,
 		github.PrLogField:   number,
 		"state":             state,
 		"commit":            commit,
-		"trigger":           trigger,
+		"body":              body,
 	})
 
 	//
@@ -237,7 +237,7 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit string, trigger bool,
 	}
 
 	// Skip if trigger false
-	if !trigger {
+	if !refreshRe.MatchString(body) && isCMD {
 		s.Log.Info("will not trigger")
 		return nil
 	}
