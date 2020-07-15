@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/creasty/defaults"
+	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 
 	"gopkg.in/yaml.v2"
@@ -54,6 +55,7 @@ var (
 	succesMessage = "Teams were synced"
 	failMessage   = "Failed to sync Teams: `%v`"
 	usersDiffMsg  = "Some users are on the organization but are not declared on the file, please remove them manualy or update the file: %v"
+	PRNotApproved = "Your pull request is not approved yet"
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -86,16 +88,20 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	)
 	l.Info("Event received")
 
-	switch eventType {
-	case "pull_request":
-		var p github.PullRequestEvent
+	pp.Println("=======")
+	fmt.Println(string(payload))
+	pp.Println("=======")
 
-		if err := json.Unmarshal(payload, &p); err != nil {
+	switch eventType {
+	case "pull_request_review_comment":
+		var e github.ReviewEvent
+
+		if err := json.Unmarshal(payload, &e); err != nil {
 			return err
 		}
 
 		go func() {
-			if err := s.handlePR(l, &p); err != nil {
+			if err := s.handleReviewEvent(l, &e); err != nil {
 				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
 		}()
@@ -105,11 +111,13 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	return nil
 }
 
-func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+func (s *Server) handleReviewEvent(l *logrus.Entry, e *github.ReviewEvent) (err error) {
 	var (
-		org    = p.Repo.Owner.Login
-		repo   = p.Repo.Name
-		number = p.Number
+		org    = e.Repo.Owner.Login
+		repo   = e.PullRequest.Base.Repo.Name
+		number = e.PullRequest.Number
+		state  = github.ReviewState(strings.ToUpper(string(e.Review.State)))
+		commit = e.PullRequest.Head.Ref
 	)
 
 	// Setup Logger
@@ -117,8 +125,11 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		github.OrgLogField:  org,
 		github.RepoLogField: repo,
 		github.PrLogField:   number,
+		"state":             state,
+		"commit":            commit,
 	})
 
+	//
 	l.Info("Handle PR")
 
 	//
@@ -135,7 +146,13 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	}
 
 	//
-	if err = s.handle(org, repo, p.PullRequest.Head.Ref); err != nil {
+	if state != github.ReviewStateApproved {
+		s.Log.Info(PRNotApproved)
+		return nil
+	}
+
+	//
+	if err = s.handle(org, repo, commit); err != nil {
 		s.Log.Error(err)
 		//
 		if err = s.Ghc.CreateComment(org, repo, number, fmt.Sprintf(failMessage, err.Error())); err != nil {
