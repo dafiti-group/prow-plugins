@@ -50,6 +50,12 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 		"bodyMatchString ":  bodyMatchString,
 	})
 
+	// Skip if trigger false
+	if !bodyMatchString && isCMD {
+		s.Log.Infof("will not trigger for `%v``", body)
+		return nil
+	}
+
 	//
 	l.Info("Handle")
 
@@ -77,12 +83,6 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 	//
 	if state != github.ReviewStateApproved {
 		s.Log.Warn(PRNotApproved)
-		return nil
-	}
-
-	// Skip if trigger false
-	if !bodyMatchString && isCMD {
-		s.Log.Infof("will not trigger for %v", body)
 		return nil
 	}
 
