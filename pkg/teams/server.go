@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -37,12 +38,22 @@ type Server struct {
 	Log            *logrus.Entry
 }
 
+type Base struct {
+	ApiVersion string              `yaml:"apiVersion"`
+	Teams      []map[string][]Team `yaml:"teams"`
+}
+
+type Team struct {
+	Login string `yaml:"login"`
+}
+
 var (
-	targetBranch = "feature/automated-merge-proposal"
-	fileName     = "TEAMS"
+	fileName = "TEAMS"
+	message  = "The Teams were synced"
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	//
 	eventType, eventGUID, payload, ok, _ := github.ValidateWebhook(w, r, s.TokenGenerator)
 	if !ok {
 		s.Log.Error("validate webhook failed")
@@ -56,11 +67,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//
 	s.Log.Info("handle event ok")
 	fmt.Fprint(w, "Event received. Have a nice day.")
 }
 
 func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err error) {
+	//
 	l := s.Log.WithFields(
 		logrus.Fields{
 			"event-type":     eventType,
@@ -78,6 +91,18 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 		}
 
 		go func() {
+			if err := s.handlePUSH(l, &p); err != nil {
+				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
+			}
+		}()
+	case "pull_request":
+		var p github.PullRequestEvent
+
+		if err := json.Unmarshal(payload, &p); err != nil {
+			return err
+		}
+
+		go func() {
 			if err := s.handlePR(l, &p); err != nil {
 				s.Log.WithError(err).WithFields(l.Data).Info("Refreshing github statuses failed.")
 			}
@@ -88,7 +113,7 @@ func (s *Server) handleEvent(eventType, eventGUID string, payload []byte) (err e
 	return nil
 }
 
-func (s *Server) handlePR(l *logrus.Entry, p *github.PushEvent) (err error) {
+func (s *Server) handlePUSH(l *logrus.Entry, p *github.PushEvent) (err error) {
 	var (
 		org  = p.Repo.Owner.Login
 		repo = p.Repo.Name
@@ -102,7 +127,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PushEvent) (err error) {
 
 	l.Info("Handle PR")
 
-	if err = s.handle(org, repo, p); err != nil {
+	if err = s.handle(org, repo, p.After); err != nil {
 		s.Log.Error(err)
 		return err
 	}
@@ -110,20 +135,58 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PushEvent) (err error) {
 	return err
 }
 
-// teams:
-//   - appLatam:
-// 	   - login: vrenan
+func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err error) {
+	var (
+		org    = p.Repo.Owner.Login
+		repo   = p.Repo.Name
+		number = p.Number
+	)
 
-type Base struct {
-	ApiVersion string              `yaml:"apiVersion"`
-	Teams      []map[string][]Team `yaml:"teams"`
+	// Setup Logger
+	l = l.WithFields(logrus.Fields{
+		github.OrgLogField:  org,
+		github.RepoLogField: repo,
+		github.PrLogField:   number,
+	})
+
+	l.Info("Handle PR")
+
+	//
+	if err = s.handle(org, repo, p.PullRequest.Base.Ref); err != nil {
+		s.Log.Error(err)
+		return err
+	}
+
+	//
+	botName, err := s.Ghc.BotName()
+	if err != nil {
+		s.Log.WithError(err).Error("failed getting botName")
+		return err
+	}
+
+	//
+	if err = s.Ghc.DeleteStaleComments(org, repo, number, nil, shouldPrune(botName)); err != nil {
+		s.Log.WithError(err).Error("failed to prune comments")
+		return err
+	}
+
+	//
+	if err = s.Ghc.CreateComment(org, repo, number, message); err != nil {
+		s.Log.WithError(err).Error("failed to create comment")
+		return err
+	}
+
+	return err
 }
 
-type Team struct {
-	Login string `yaml:"login"`
+func shouldPrune(botName string) func(github.IssueComment) bool {
+	return func(ic github.IssueComment) bool {
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) &&
+			strings.Contains(ic.Body, message)
+	}
 }
 
-func (s *Server) handle(org, repo string, p *github.PushEvent) error {
+func (s *Server) handle(org, repo, commit string) error {
 	// Clone the repo, checkout the target branch.
 	r, err := s.Gc.ClientFor(org, repo)
 	if err != nil {
@@ -138,8 +201,8 @@ func (s *Server) handle(org, repo string, p *github.PushEvent) error {
 	}()
 
 	//
-	if err := r.Checkout(p.After); err != nil {
-		s.Log.WithError(err).Warningf("cannot checkout %s", p.After)
+	if err := r.Checkout(commit); err != nil {
+		s.Log.WithError(err).Warningf("cannot checkout %s", commit)
 		return err
 	}
 
@@ -186,7 +249,6 @@ func (s *Server) handle(org, repo string, p *github.PushEvent) error {
 
 //
 func (s *Server) sync(team *github.Team, org string, teamName string, teamMember Team) (err error) {
-	// @TODO: Sync with github
 	isMember, err := s.Ghc.IsMember(org, teamMember.Login)
 	if err != nil {
 		return err
