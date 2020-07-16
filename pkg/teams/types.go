@@ -15,7 +15,6 @@ package teams
 
 import (
 	"github.com/sirupsen/logrus"
-
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
@@ -27,14 +26,4 @@ type Server struct {
 	ConfigAgent    *config.Agent
 	Ghc            github.Client
 	Log            *logrus.Entry
-}
-
-type Base struct {
-	ApiVersion string              `yaml:"apiVersion"`
-	Teams      []map[string][]Team `yaml:"teams"`
-}
-
-type Team struct {
-	Login      string `yaml:"login"`
-	Maintainer bool   `default:"true" yaml:"maintainer"`
 }

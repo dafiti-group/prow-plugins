@@ -119,13 +119,15 @@ func (s *Base) Fetch() (err error) {
 		s.Teams[key].ID = t.ID
 
 		//
-		diffMembersList[t.Slug] = diff(actualMembers, team.Members)
+		diff := diff(actualMembers, team.Members)
+		if len(diff) != 0 {
+			diffMembersList[t.Slug] = diff
+		}
 	}
 
 	//
 	if len(diffMembersList) != 0 {
 		err = fmt.Errorf("%v", diffMembersList)
-		s.log.Error(err)
 		return err
 	}
 
