@@ -32,6 +32,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("================")
+	fmt.Println(string(payload))
+	fmt.Println("================")
 	// Respond with
 	if err := s.serverHandler(eventType, eventGUID, payload); err != nil {
 		s.Log.WithError(err).Error("Error parsing event.")

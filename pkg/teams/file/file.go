@@ -32,7 +32,7 @@ type Member struct {
 }
 
 var (
-	fileName = "TEAMS"
+	fileName = "OWNERS_ALIASES"
 )
 
 func New(l *logrus.Entry, ghc github.Client, gc git.ClientFactory, org string) *Base {
