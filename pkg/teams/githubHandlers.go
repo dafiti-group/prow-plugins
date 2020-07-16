@@ -27,6 +27,7 @@ func (s *Server) handleCommentEvent(l *logrus.Entry, e *github.IssueCommentEvent
 		repo   = e.Repo.Name
 		number = e.Issue.Number
 		body   = e.Comment.Body
+		action = ""
 	)
 
 	pr, err := s.Ghc.GetPullRequest(org, repo, number)
@@ -37,7 +38,7 @@ func (s *Server) handleCommentEvent(l *logrus.Entry, e *github.IssueCommentEvent
 	commit := pr.Head.Ref
 	state := github.ReviewState(strings.ToUpper(string(pr.State)))
 
-	err = s.handle(l, org, repo, commit, body, true, number, state)
+	err = s.handle(l, org, repo, action, commit, body, true, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on handle comment")
 		return err
@@ -52,8 +53,9 @@ func (s *Server) handleReviewEvent(l *logrus.Entry, e *github.ReviewEvent) (err 
 		number = e.PullRequest.Number
 		state  = github.ReviewState(strings.ToUpper(string(e.PullRequest.State)))
 		commit = e.PullRequest.Head.Ref
+		action = ""
 	)
-	err = s.handle(l, org, repo, commit, "", false, number, state)
+	err = s.handle(l, org, repo, action, commit, "", false, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on pull request review")
 		return err
@@ -68,8 +70,9 @@ func (s *Server) handlePR(l *logrus.Entry, e *github.PullRequestEvent) (err erro
 		number = e.PullRequest.Number
 		state  = github.ReviewState(strings.ToUpper(string(e.PullRequest.State)))
 		commit = e.PullRequest.Head.Ref
+		action = ""
 	)
-	err = s.handle(l, org, repo, commit, "", false, number, state)
+	err = s.handle(l, org, repo, action, commit, "", false, number, state)
 	if err != nil {
 		l.WithError(err).Error("failed do handle request on pull request")
 		return err

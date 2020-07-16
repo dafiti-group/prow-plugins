@@ -35,14 +35,17 @@ import (
 	"k8s.io/test-infra/prow/interrupts"
 	"k8s.io/test-infra/prow/pluginhelp"
 	"k8s.io/test-infra/prow/pluginhelp/externalplugins"
+	"k8s.io/test-infra/prow/plugins"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type options struct {
 	port int
 
-	configPath string
-	dryRun     bool
-	github     prowflagutil.GitHubOptions
+	configPath   string
+	pluginConfig string
+	dryRun       bool
+	github       prowflagutil.GitHubOptions
 
 	webhookSecretFile string
 }
@@ -62,6 +65,7 @@ func gatherOptions() options {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fs.IntVar(&o.port, "port", 8888, "Port to listen on.")
 	fs.StringVar(&o.configPath, "config-path", "/etc/config/config.yaml", "Path to config.yaml.")
+	fs.StringVar(&o.pluginConfig, "plugin-config", "/etc/plugins/plugins.yaml", "Path to plugin config file.")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "Dry run for testing. Uses API tokens but does not mutate.")
 	fs.StringVar(&o.webhookSecretFile, "hmac-secret-file", "/etc/webhook/hmac", "Path to the file containing the GitHub HMAC secret.")
 	for _, group := range []flagutil.OptionGroup{&o.github} {
@@ -109,6 +113,23 @@ func main() {
 		}
 	})
 
+	// Used this as example https://github.com/kubernetes/test-infra/blob/master/prow/cmd/hook/main.go#L185
+	pluginAgent := &plugins.ConfigAgent{}
+	if err := pluginAgent.Start(o.pluginConfig, true); err != nil {
+		logrus.WithError(err).Fatal("Error starting plugins.")
+	}
+
+	mdYAMLEnabled := func(org, repo string) bool {
+		return pluginAgent.Config().MDYAMLEnabled(org, repo)
+	}
+	skipCollaborators := func(org, repo string) bool {
+		return pluginAgent.Config().SkipCollaborators(org, repo)
+	}
+	ownersDirBlacklist := func() config.OwnersDirBlacklist {
+		return configAgent.Config().OwnersDirBlacklist
+	}
+	ownersClient := repoowners.NewClient(git.ClientFactoryFrom(gitClient), githubClient, mdYAMLEnabled, skipCollaborators, ownersDirBlacklist)
+
 	jiraServer := &jira.Server{
 		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		ConfigAgent:    configAgent,
@@ -121,6 +142,7 @@ func main() {
 		ConfigAgent:    configAgent,
 		Gc:             git.ClientFactoryFrom(gitClient),
 		Ghc:            githubClient,
+		Oc:             ownersClient,
 		Log:            log.WithField("plugin", "teams"),
 	}
 

@@ -26,12 +26,12 @@ import (
 var (
 	succesMessage = "Teams were synced"
 	failMessage   = "Failed to sync Teams: `%v`"
-	usersDiffMsg  = "Some users are on the organization but are not declared on the file, please remove them manualy or update the file: %v"
-	PRNotApproved = "Your pull request is not approved yet"
+	usersDiffMsg  = "Some users are on the organization but are not declared on the OWNERS_ALIAS, please remove them manualy or update the file: %v"
+	PRNotApproved = "Your pull request is not approved yet. I will wait to sync the file with github"
 	syncRe        = regexp.MustCompile(`(?mi)^/sync-teams\s*$`)
 )
 
-func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD bool, number int, state github.ReviewState) (err error) {
+func (s *Server) handle(l *logrus.Entry, org, repo, action, commit, body string, isCMD bool, number int, state github.ReviewState) (err error) {
 	//
 	bodyMatchString := syncRe.MatchString(body)
 
@@ -42,6 +42,7 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 		github.PrLogField:   number,
 		"state":             state,
 		"commit":            commit,
+		"action":            action,
 		"body":              body,
 		"bodyMatchString ":  bodyMatchString,
 	})
@@ -69,7 +70,7 @@ func (s *Server) handle(l *logrus.Entry, org, repo, commit, body string, isCMD b
 	}
 
 	//
-	file := file.New(l, s.Ghc, s.Gc, org)
+	file := file.New(l, s.Ghc, s.Gc, s.Oc, org)
 
 	// Clone Repo
 	if err = file.Clone(repo, commit); err != nil {

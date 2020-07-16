@@ -18,11 +18,12 @@ spec:
       containers:
       - args:
         - --config-path=/etc/config/config.yaml
+        - --plugin-config=/etc/plugins/plugins.yaml
         - --hmac-secret-file=/etc/webhook/hmac
         - --github-endpoint=http://ghproxy
         - --github-endpoint=https://api.github.com
         - --github-token-path=/etc/github/oauth
-        image: quay.io/dafiti/prow-plugins:master
+        image: quay.io/dafiti/prow-plugins:develop
         imagePullPolicy: Always
         name: prow-plugins
         ports:
@@ -37,6 +38,9 @@ spec:
         - mountPath: /etc/config
           name: config
           readOnly: true
+        - mountPath: /etc/plguins
+          name: plugins
+          readOnly: true
         - mountPath: /etc/github
           name: oauth
           readOnly: true
@@ -46,6 +50,10 @@ spec:
         secret:
           defaultMode: 420
           secretName: hmac-token
+      - configMap:
+          defaultMode: 420
+          name: plugins
+        name: plugins
       - configMap:
           defaultMode: 420
           name: config
