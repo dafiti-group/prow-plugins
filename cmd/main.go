@@ -115,7 +115,7 @@ func main() {
 
 	// Used this as example https://github.com/kubernetes/test-infra/blob/master/prow/cmd/hook/main.go#L185
 	pluginAgent := &plugins.ConfigAgent{}
-	if err := pluginAgent.Start(o.pluginConfig, true); err != nil {
+	if err := pluginAgent.Start(o.pluginConfig, false); err != nil {
 		logrus.WithError(err).Fatal("Error starting plugins.")
 	}
 
@@ -134,6 +134,8 @@ func main() {
 		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
 		ConfigAgent:    configAgent,
 		Ghc:            githubClient,
+		Oc:             ownersClient,
+		Pa:             pluginAgent,
 		Log:            log.WithField("plugin", "jira"),
 	}
 

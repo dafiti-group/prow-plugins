@@ -1,0 +1,44 @@
+external_plugins:
+  dafiti-group/devhub:
+    - name: teams-sync
+      endpoint: http://prow-plugins/teams-sync
+      events:
+        - pull_request
+        - pull_request_review
+        - issue_comment
+  dafiti-group/prow-plugins:
+    - name: jira-checker
+      endpoint: http://prow-plugins/jira-checker
+      events:
+        - pull_request
+  dafiti-group/mobile-refresh-token:
+    - name: jira-checker
+      endpoint: http://prow-plugins/jira-checker
+      events:
+        - pull_request
+  dafiti-group/mobile-api:
+    - name: jira-checker
+      endpoint: http://prow-plugins/jira-checker
+      events:
+        - pull_request
+plugins:
+  dafiti-group:
+    - trigger
+    - wip
+    - cat
+    - dog
+    - approve
+    - assign
+    # - blockade
+    # - blunderbuss
+    - branchcleaner
+    - goose
+    - heart
+    - help
+    # - hold
+    # - label
+    - lgtm
+    # - override
+    # - owners-label
+    - pony
+    - skip

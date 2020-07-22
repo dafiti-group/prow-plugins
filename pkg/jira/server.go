@@ -24,9 +24,13 @@ import (
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
+	"k8s.io/test-infra/prow/plugins"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type Server struct {
+	Oc             *repoowners.Client
+	Pa             *plugins.ConfigAgent
 	TokenGenerator func() []byte
 	ConfigAgent    *config.Agent
 	Ghc            github.Client
@@ -112,11 +116,26 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		return nil
 	}
 
-	// Only add for one repo for now
-	if repo != "prow-plugins" && repo != "mobile-refresh-token" && repo != "mobile-api" {
-		l.Infof("Repo '%v' not allowed", repo)
-		return nil
+	if orgs, repos := s.Pa.Config().EnabledReposForExternalPlugin("jira-checker"); orgs != nil || repos != nil {
+		found := false
+		repoOrg := fmt.Sprintf("%v/%v", org, repo)
+		for _, v := range repos {
+			if v == repoOrg {
+				found = true
+			}
+		}
+
+		if found {
+			l.Infof("%v is elegible", repoOrg)
+		} else {
+			err = fmt.Errorf("Org Repo '%v' not allowed", repoOrg)
+			l.Error(err)
+			return err
+		}
 	}
+
+	// Only add for one repo for now
+	return nil
 
 	jiraTag := titleRegex.FindString(title)
 
