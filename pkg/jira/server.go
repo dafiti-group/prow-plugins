@@ -134,9 +134,6 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		}
 	}
 
-	// Only add for one repo for now
-	return nil
-
 	jiraTag := titleRegex.FindString(title)
 
 	if jiraTag == "" {
