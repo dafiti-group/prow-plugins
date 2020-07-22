@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dafiti-group/prow-plugins/pkg/checkmarx"
 	"github.com/dafiti-group/prow-plugins/pkg/jira"
 	"github.com/dafiti-group/prow-plugins/pkg/teams"
 	"github.com/sirupsen/logrus"

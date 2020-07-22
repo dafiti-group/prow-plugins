@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jira
+package checkmarx
 
 import (
 	"encoding/json"
@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/test-infra/prow/config"
+	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
 )
@@ -28,6 +29,7 @@ import (
 type Server struct {
 	TokenGenerator func() []byte
 	ConfigAgent    *config.Agent
+	Gc             git.ClientFactory
 	Ghc            github.Client
 	Log            *logrus.Entry
 }
