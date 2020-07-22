@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/creasty/defaults v1.4.0
+	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/sirupsen/logrus v1.6.0
 	gopkg.in/yaml.v2 v2.2.8
