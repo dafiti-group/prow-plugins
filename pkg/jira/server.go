@@ -113,7 +113,7 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 	}
 
 	// Only add for one repo for now
-	if repo != "prow-plugins" {
+	if repo != "prow-plugins" && repo != "mobile-refresh-token" && repo != "mobile-api" {
 		l.Infof("Repo '%v' not allowed", repo)
 		return nil
 	}
