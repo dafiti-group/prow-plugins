@@ -18,10 +18,11 @@ The `hmac` is the token used for a basic authentication, the fake one used for t
 
 Assuming you have a k8s cluster running execute `tilt up` after a few seconds the application should be up and running, you can execute phony or a curl to make a request
 ```
-docker run --rm seriouscomp/phony --address http://127.0.0.1:8888 \
+docker run --rm  --network="host" -v "$PWD/:/root" seriouscomp/phony \
+  --address http://127.0.0.1:8888/jira-checker \
   --hmac e0e8b7f3b67db6837ead4aeabd14547be121d5de \
-  --event issue_comment \
-  --payload examples/<some-example>.json
+  --event pull_request \
+  --payload /root/examples/push.json
 ```
 
 ## Testing
