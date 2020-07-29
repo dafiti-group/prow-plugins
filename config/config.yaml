@@ -1,0 +1,42 @@
+# Plugins
+---
+apiVersion: v1
+data:
+  plugins.yaml: |-
+    external_plugins:
+      dafiti-group/prow-plugins:
+        - name: jira-checker
+          endpoint: http://prow-plugins/jira-checker
+          events:
+            - pull_request
+    plugins:
+      dafiti-group:
+        - trigger
+        - wip
+        - lgtm
+
+kind: ConfigMap
+metadata:
+  name: plugins
+# Config
+---
+apiVersion: v1
+data:
+  config.yaml: |-
+    prowjob_namespace: prow
+    pod_namespace: prow-test-pods
+    tide:
+      sync_period: 10s
+      queries:
+        - repos:
+            - dafiti-group/prow-plugins
+          labels:
+            - lgtm
+            - approved
+          missingLabels:
+            - do-not-merge
+            - do-not-merge/no-jira-issue-on-title
+            - do-not-merge/verify-checkmarx
+kind: ConfigMap
+metadata:
+  name: config
