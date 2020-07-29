@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -100,6 +101,19 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		// msg    = "This pull request does not have a jira tag on the title"
 	)
 
+	//
+	botName, err := s.Ghc.BotName()
+	if err != nil {
+		l.WithError(err).Error("failed getting botName")
+		return err
+	}
+
+	// Clear comments
+	if err = s.Ghc.DeleteStaleComments(org, repo, number, nil, shouldPrune(botName)); err != nil {
+		l.WithError(err).Error("failed to prune comments")
+		return err
+	}
+
 	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
@@ -158,14 +172,21 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		l.WithError(err).Error("failed to remove label")
 		return err
 	}
-	// cp.PruneComments(func(ic github.IssueComment) bool {
-	// 	return strings.Contains(ic.Body, blockedPathsBody)
-	// })
+
 	return err
 }
 
+//
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	return &pluginhelp.PluginHelp{
 		Description: "The Jira checker plugin checks your PR name",
 	}, nil
+}
+
+//
+func shouldPrune(botName string) func(github.IssueComment) bool {
+	return func(ic github.IssueComment) bool {
+		hasMsgs := strings.Contains(ic.Body, InvalidLabel)
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) && hasMsgs
+	}
 }

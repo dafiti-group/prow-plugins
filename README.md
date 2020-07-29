@@ -5,11 +5,11 @@
 ## Running
 
 ```
-go run *.go \
-  --github-token-path ./fake-token \
-  --hmac-secret-file ./fake-token \
-  --prow-url "<deck-url>" \
-  --config-path config.yaml
+go run ./cmd/*.go \
+    --github-token-path <SOME-FILE-WITH-GITHUB-TOKEN> \
+    --hmac-secret-file ./examples/hmac \
+    --config-path config.yaml \
+    --plugin-config plugins.yaml
 ```
 
 ## Local Testing
