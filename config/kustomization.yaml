@@ -9,6 +9,8 @@ resources:
 - service.yaml
 - config.yaml
 - secrets.yaml
+- roles.yaml
+- crd.yaml
 
 secretGenerator:
 - name: github-token

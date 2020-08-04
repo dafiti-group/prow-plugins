@@ -9,3 +9,7 @@ k8s_resource(
   'prow-plugins',
   port_forwards=8888
 )
+k8s_resource(
+  'deck',
+  port_forwards=8080
+)

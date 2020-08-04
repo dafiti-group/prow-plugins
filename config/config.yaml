@@ -9,6 +9,10 @@ data:
           endpoint: http://prow-plugins/jira-checker
           events:
             - pull_request
+        - name: checkmarx
+          endpoint: http://prow-plugins/checkmarx
+          events:
+            - pull_request
     plugins:
       dafiti-group:
         - trigger
@@ -24,7 +28,8 @@ apiVersion: v1
 data:
   config.yaml: |-
     prowjob_namespace: prow
-    pod_namespace: prow-test-pods
+    pod_namespace: test-pods
+    log_level: debug
     tide:
       sync_period: 10s
       queries:
@@ -37,6 +42,49 @@ data:
             - do-not-merge
             - do-not-merge/no-jira-issue-on-title
             - do-not-merge/verify-checkmarx
+    presubmits:
+      dafiti-group/prow-plugins:
+      - name: PR-test
+        branches:
+        - checkmarx
+        always_run: true
+        decorate: true
+        spec:
+          containers:
+          - image: alpine:latest
+            command:
+            - echo "Teste"
+        annotations:
+          testgrid-create-test-group: 'true'
+    sinker:
+      resync_period: 1m
+      max_prowjob_age: 48h
+      max_pod_age: 48h
+      terminated_pod_ttl: 30m
+
+    plank:
+      job_url_template: ''
+      report_templates:
+        '*': '[Full PR test history]'
+      job_url_prefix_config:
+        '*': https://localhost:8080/view/
+      pod_pending_timeout: 15m
+      pod_unscheduled_timeout: 1m
+      default_decoration_configs:
+        '*':
+          timeout: 2h
+          grace_period: 15s
+          utility_images:
+            clonerefs: "gcr.io/k8s-prow/clonerefs:v20200703-4509c055d7"
+            initupload: "gcr.io/k8s-prow/initupload:v20200703-4509c055d7"
+            entrypoint: "gcr.io/k8s-prow/entrypoint:v20200703-4509c055d7"
+            sidecar: "gcr.io/k8s-prow/sidecar:v20200703-4509c055d7"
+          gcs_configuration:
+            bucket: "kubernetes-jenkins"
+            path_strategy: "legacy"
+            default_org: "dafiti-group"
+            default_repo: "prow-plugins"
+          gcs_credentials_secret: "service-account"
 kind: ConfigMap
 metadata:
   name: config

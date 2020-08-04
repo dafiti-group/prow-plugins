@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dafiti-group/prow-plugins/pkg/checkmarx"
 	"github.com/dafiti-group/prow-plugins/pkg/jira"
 	"github.com/dafiti-group/prow-plugins/pkg/teams"
 	"github.com/sirupsen/logrus"
@@ -148,9 +149,20 @@ func main() {
 		Log:            log.WithField("plugin", "teams"),
 	}
 
+	checkmarxServer := &checkmarx.Server{
+		TokenGenerator: secretAgent.GetTokenGenerator(o.webhookSecretFile),
+		ConfigAgent:    configAgent,
+		Gc:             git.ClientFactoryFrom(gitClient),
+		Ghc:            githubClient,
+		Pa:             pluginAgent,
+		Oc:             ownersClient,
+		Log:            log.WithField("plugin", "checkmarx"),
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/jira-checker", jiraServer)
 	mux.Handle("/teams-sync", teamsServer)
+	mux.Handle("/checkmarx", checkmarxServer)
 	externalplugins.ServeExternalPluginHelp(mux, log, HelpProvider)
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(o.port), Handler: mux}
 	defer interrupts.WaitForGracefulShutdown()
