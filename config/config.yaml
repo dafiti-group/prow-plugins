@@ -42,20 +42,21 @@ data:
             - do-not-merge
             - do-not-merge/no-jira-issue-on-title
             - do-not-merge/verify-checkmarx
-    presubmits:
-      dafiti-group/prow-plugins:
-      - name: PR-test
-        branches:
-        - checkmarx
-        always_run: true
-        decorate: true
-        spec:
-          containers:
-          - image: alpine:latest
-            command:
-            - echo "Teste"
-        annotations:
-          testgrid-create-test-group: 'true'
+
+    in_repo_config:
+      enabled:
+        # The key can be one of "*" for "globally", "org" or "org/repo".
+        # The narrowest match is used.
+        dafiti-group/prow-plugins: true
+
+      # Clusters must be allowed before they can be used. Below is the default: Allow the `default` cluster
+      # globally.
+      # This setting also allows using "*" for "globally", "org" or "org/repo" as key.
+      # a given repo. All clusters that are allowed for the specific repo, its org or
+      # globally can be used.
+      allowed_clusters:
+        "*": ["default"]
+
     sinker:
       resync_period: 1m
       max_prowjob_age: 48h

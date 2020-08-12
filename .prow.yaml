@@ -1,0 +1,9 @@
+postsubmits:
+- name: prow-job-test
+  always_run: true
+  decorate: true
+  spec:
+    containers:
+    - image: alpine:latest
+      command:
+      - echo "teste"
