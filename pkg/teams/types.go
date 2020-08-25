@@ -18,12 +18,14 @@ import (
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type Server struct {
 	TokenGenerator func() []byte
 	Gc             git.ClientFactory
 	ConfigAgent    *config.Agent
+	Oc             *repoowners.Client
 	Ghc            github.Client
 	Log            *logrus.Entry
 }

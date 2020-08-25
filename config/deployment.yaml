@@ -1,0 +1,326 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 1
+  labels:
+    app: prow-plugins
+  name: prow-plugins
+  namespace: prow
+spec:
+  selector:
+    matchLabels:
+      app: prow-plugins
+  template:
+    metadata:
+      labels:
+        app: prow-plugins
+    spec:
+      containers:
+      - args:
+        - --config-path=/etc/config/config.yaml
+        - --plugin-config=/etc/plugins/plugins.yaml
+        - --hmac-secret-file=/etc/webhook/hmac
+        - --github-endpoint=http://ghproxy
+        - --github-endpoint=https://api.github.com
+        - --github-token-path=/etc/github/oauth
+        image: quay.io/dafiti/prow-plugins:develop
+        imagePullPolicy: Always
+        name: prow-plugins
+        ports:
+        - containerPort: 8888
+          name: http
+          protocol: TCP
+        resources: {}
+        volumeMounts:
+        - mountPath: /etc/webhook
+          name: hmac
+          readOnly: true
+        - mountPath: /etc/config
+          name: config
+          readOnly: true
+        - mountPath: /etc/plugins
+          name: plugins
+          readOnly: true
+        - mountPath: /etc/github
+          name: oauth
+          readOnly: true
+      restartPolicy: Always
+      volumes:
+      - name: hmac
+        secret:
+          defaultMode: 420
+          secretName: hmac-token
+      - configMap:
+          defaultMode: 420
+          name: plugins
+        name: plugins
+      - configMap:
+          defaultMode: 420
+          name: config
+        name: config
+      - name: oauth
+        secret:
+          defaultMode: 420
+          secretName: github-token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prow
+  name: prow-controller-manager
+  labels:
+    app: prow-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prow-controller-manager
+  template:
+    metadata:
+      labels:
+        app: prow-controller-manager
+    spec:
+      serviceAccountName: prow-controller-manager
+      containers:
+      - name: prow-controller-manager
+        args:
+        - --dry-run=false
+        - --config-path=/etc/config/config.yaml
+        - --github-token-path=/etc/github/token
+        - --github-endpoint=http://ghproxy
+        - --github-endpoint=https://api.github.com
+        - --enable-controller=plank
+        image: gcr.io/k8s-prow/prow-controller-manager:v20200731-31cc3b51e1
+        volumeMounts:
+        - name: github-token
+          mountPath: /etc/github
+          readOnly: true
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+      volumes:
+      - name: github-token
+        secret:
+          secretName: github-token
+      - name: config
+        configMap:
+          name: config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prow
+  name: horologium
+  labels:
+    app: horologium
+spec:
+  replicas: 1 # Do not scale up.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: horologium
+  template:
+    metadata:
+      labels:
+        app: horologium
+    spec:
+      serviceAccountName: "horologium"
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: horologium
+        image: gcr.io/k8s-prow/horologium:v20200729-2a25cd5714
+        args:
+        - --dry-run=false
+        - --config-path=/etc/config/config.yaml
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prow
+  name: sinker
+  labels:
+    app: sinker
+spec:
+  selector:
+    matchLabels:
+      app: sinker
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: sinker
+    spec:
+      serviceAccountName: "sinker"
+      containers:
+      - name: sinker
+        image: gcr.io/k8s-prow/sinker:v20200731-31cc3b51e1
+        args:
+        - --config-path=/etc/config/config.yaml
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prow
+  name: deck
+  labels:
+    app: deck
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: deck
+  template:
+    metadata:
+      labels:
+        app: deck
+    spec:
+      serviceAccountName: "deck"
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: deck
+        image: gcr.io/k8s-prow/deck:latest
+        args:
+        - --config-path=/etc/config/config.yaml
+        - --plugin-config=/etc/plugins/plugins.yaml
+        - --hook-url=http://hook:9090/plugin-help
+        - --github-token-path=/etc/github/oauth
+        - --github-endpoint=http://ghproxy
+        - --github-endpoint=https://api.github.com
+        - --github-graphql-endpoint=http://ghproxy/graphql
+        - --plugin-config=/etc/plugins/plugins.yaml
+        - --spyglass=true
+        ports:
+          - name: http
+            containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+        - name: oauth
+          mountPath: /etc/github
+          readOnly: true
+        - name: plugins
+          mountPath: /etc/plugins
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          timeoutSeconds: 600
+      volumes:
+      - name: config
+        configMap:
+          name: config
+      - name: oauth
+        secret:
+          secretName: github-token
+      - name: plugins
+        configMap:
+          name: plugins
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prow
+  name: hook
+  labels:
+    app: hook
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: hook
+  template:
+    metadata:
+      labels:
+        app: hook
+    spec:
+      serviceAccountName: "hook"
+      terminationGracePeriodSeconds: 180
+      containers:
+      - name: hook
+        image: gcr.io/k8s-prow/hook:v20200803-66a0db2cd2
+        imagePullPolicy: Always
+        args:
+        - --dry-run=false
+        - --config-path=/etc/config/config.yaml
+        - --github-token-path=/etc/github/token
+        - --github-endpoint=http://ghproxy
+        - --github-endpoint=https://api.github.com
+        ports:
+          - name: http
+            containerPort: 8888
+        volumeMounts:
+        - name: hmac
+          mountPath: /etc/webhook
+          readOnly: true
+        - name: github-token
+          mountPath: /etc/github
+          readOnly: true
+        - name: config
+          mountPath: /etc/config
+          readOnly: true
+        - name: plugins
+          mountPath: /etc/plugins
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 3
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          timeoutSeconds: 600
+      volumes:
+      - name: hmac
+        secret:
+          secretName: hmac-token
+      - name: github-token
+        secret:
+          secretName: github-token
+      - name: config
+        configMap:
+          name: config
+      - name: plugins
+        configMap:
+          name: plugins

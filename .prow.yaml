@@ -1,0 +1,10 @@
+presubmits:
+  dafiti-group/prow-plugins:
+  - name: prow-job-test
+    always_run: true
+    decorate: true
+    spec:
+      containers:
+      - image: alpine:latest
+        command:
+        - echo "teste"

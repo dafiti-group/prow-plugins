@@ -2,13 +2,12 @@ package file
 
 import (
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
+	"strings"
 
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
 	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type Base struct {
@@ -17,6 +16,7 @@ type Base struct {
 	log        *logrus.Entry
 	ghc        github.Client
 	gc         git.ClientFactory
+	oc         *repoowners.Client
 	org        string
 }
 
@@ -32,53 +32,31 @@ type Member struct {
 }
 
 var (
-	fileName = "TEAMS"
+	fileName = "OWNERS_ALIASES"
 )
 
-func New(l *logrus.Entry, ghc github.Client, gc git.ClientFactory, org string) *Base {
+func New(l *logrus.Entry, ghc github.Client, gc git.ClientFactory, oc *repoowners.Client, org string) *Base {
 	return &Base{
 		ghc: ghc,
 		log: l,
 		org: org,
 		gc:  gc,
+		oc:  oc,
 	}
 }
 
 func (s *Base) Clone(repo, commit string) (err error) {
-	// Clone the repo, checkout the target branch.
-	r, err := s.gc.ClientFor(s.org, repo)
-	if err != nil {
-		return err
-	}
-
-	//
-	defer func() {
-		if err := r.Clean(); err != nil {
-			s.log.WithError(err).Error("Error cleaning up repo.")
+	ra, err := s.oc.LoadRepoAliases(s.org, repo, commit)
+	for teamName, members := range ra {
+		team := Team{
+			Name: teamName,
 		}
-	}()
-
-	//
-	if err := r.Checkout(commit); err != nil {
-		s.log.WithError(err).Warningf("cannot checkout %s", commit)
-		return err
-	}
-
-	//
-	path := filepath.Join(r.Directory(), fileName)
-
-	//
-	yamlFile, err := ioutil.ReadFile(path)
-	if err != nil {
-		s.log.Error(err)
-		return err
-	}
-
-	//
-	err = yaml.Unmarshal(yamlFile, s)
-	if err != nil {
-		s.log.Error(err)
-		return err
+		for _, member := range members.List() {
+			team.Members = append(team.Members, Member{
+				Login: member,
+			})
+		}
+		s.Teams = append(s.Teams, team)
 	}
 
 	return nil
@@ -138,12 +116,12 @@ func (s *Base) Fetch() (err error) {
 func diff(currentUsers []github.TeamMember, fileUsers []Member) []string {
 	mb := make(map[string]struct{}, len(fileUsers))
 	for _, x := range fileUsers {
-		mb[x.Login] = struct{}{}
+		mb[strings.ToLower(x.Login)] = struct{}{}
 	}
 
 	var diff []string
 	for _, x := range currentUsers {
-		if _, found := mb[x.Login]; !found {
+		if _, found := mb[strings.ToLower(x.Login)]; !found {
 			diff = append(diff, x.Login)
 		}
 	}

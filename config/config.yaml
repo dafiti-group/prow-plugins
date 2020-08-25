@@ -1,0 +1,103 @@
+# Plugins
+---
+apiVersion: v1
+data:
+  plugins.yaml: |-
+    external_plugins:
+      dafiti-group/prow-plugins:
+        - name: jira-checker
+          endpoint: http://prow-plugins/jira-checker
+          events:
+            - pull_request
+        - name: checkmarx
+          endpoint: http://prow-plugins/checkmarx
+          events:
+            - pull_request
+    plugins:
+      dafiti-group:
+        - trigger
+        - wip
+        - lgtm
+
+kind: ConfigMap
+metadata:
+  name: plugins
+# Config
+---
+apiVersion: v1
+data:
+  config.yaml: |-
+    prowjob_namespace: prow
+    pod_namespace: test-pods
+    log_level: debug
+    tide:
+      sync_period: 10s
+      queries:
+        - repos:
+            - dafiti-group/prow-plugins
+          labels:
+            - lgtm
+            - approved
+          missingLabels:
+            - do-not-merge
+            - do-not-merge/no-jira-issue-on-title
+            - do-not-merge/verify-checkmarx
+
+    periodics:
+    - name: prow-job-test         # Names need not be unique, but must match the regex ^[A-Za-z0-9-._]+$
+      decorate: false        # Enable Pod Utility decoration. (see below)
+      # interval: 1h          # Anything that can be parsed by time.ParseDuration.
+      # Alternatively use a cron instead of an interval, for example:
+      # cron: "05 15 * * 1-5"  # Run at 7:05 PST (15:05 UTC) every M-F
+      cron: "5 * * * *"
+      spec:
+        containers:
+        - name: prowjob-echo
+          image: alpine:latest
+          command: ["ls", "-l"]
+          restartPolicy: Never
+
+    presubmits:
+      dafiti-group/prow-plugins:
+      - name: prow-ls
+        always_run: true
+        decorate: true
+        spec:
+          containers:
+          - name: prowjob-echo
+            image: alpine:latest
+            command: ["ls", "-l"]
+            restartPolicy: Never
+
+    sinker:
+      resync_period: 1m
+      max_prowjob_age: 1h
+      max_pod_age: 48h
+      terminated_pod_ttl: 30m
+
+    plank:
+      job_url_template: ''
+      report_templates:
+        '*': '[Full PR test history]'
+      job_url_prefix_config:
+        '*': https://localhost:8080/view/
+      pod_pending_timeout: 15m
+      pod_unscheduled_timeout: 1m
+      default_decoration_configs:
+        '*':
+          timeout: 2h
+          grace_period: 15s
+          utility_images:
+            clonerefs: "gcr.io/k8s-prow/clonerefs:v20200703-4509c055d7"
+            initupload: "gcr.io/k8s-prow/initupload:v20200703-4509c055d7"
+            entrypoint: "gcr.io/k8s-prow/entrypoint:v20200703-4509c055d7"
+            sidecar: "gcr.io/k8s-prow/sidecar:v20200703-4509c055d7"
+          gcs_configuration:
+            bucket: "kubernetes-jenkins"
+            path_strategy: "legacy"
+            default_org: "dafiti-group"
+            default_repo: "prow-plugins"
+          gcs_credentials_secret: "service-account"
+kind: ConfigMap
+metadata:
+  name: config

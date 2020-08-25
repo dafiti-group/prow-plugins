@@ -18,15 +18,20 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
+	"k8s.io/test-infra/prow/plugins"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type Server struct {
+	Oc             *repoowners.Client
+	Pa             *plugins.ConfigAgent
 	TokenGenerator func() []byte
 	ConfigAgent    *config.Agent
 	Ghc            github.Client
@@ -96,6 +101,19 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		// msg    = "This pull request does not have a jira tag on the title"
 	)
 
+	//
+	botName, err := s.Ghc.BotName()
+	if err != nil {
+		l.WithError(err).Error("failed getting botName")
+		return err
+	}
+
+	// Clear comments
+	if err = s.Ghc.DeleteStaleComments(org, repo, number, nil, shouldPrune(botName)); err != nil {
+		l.WithError(err).Error("failed to prune comments")
+		return err
+	}
+
 	// Setup Logger
 	l = l.WithFields(logrus.Fields{
 		github.OrgLogField:  org,
@@ -112,10 +130,22 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		return nil
 	}
 
-	// Only add for one repo for now
-	if repo != "prow-plugins" {
-		l.Infof("Repo '%v' not allowed", repo)
-		return nil
+	if orgs, repos := s.Pa.Config().EnabledReposForExternalPlugin("jira-checker"); orgs != nil || repos != nil {
+		found := false
+		repoOrg := fmt.Sprintf("%v/%v", org, repo)
+		for _, v := range repos {
+			if v == repoOrg {
+				found = true
+			}
+		}
+
+		if found {
+			l.Infof("%v is elegible", repoOrg)
+		} else {
+			err = fmt.Errorf("Org Repo '%v' not allowed", repoOrg)
+			l.Error(err)
+			return err
+		}
 	}
 
 	jiraTag := titleRegex.FindString(title)
@@ -142,14 +172,21 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		l.WithError(err).Error("failed to remove label")
 		return err
 	}
-	// cp.PruneComments(func(ic github.IssueComment) bool {
-	// 	return strings.Contains(ic.Body, blockedPathsBody)
-	// })
+
 	return err
 }
 
+//
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	return &pluginhelp.PluginHelp{
 		Description: "The Jira checker plugin checks your PR name",
 	}, nil
+}
+
+//
+func shouldPrune(botName string) func(github.IssueComment) bool {
+	return func(ic github.IssueComment) bool {
+		hasMsgs := strings.Contains(ic.Body, InvalidLabel)
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) && hasMsgs
+	}
 }

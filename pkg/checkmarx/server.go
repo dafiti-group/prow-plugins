@@ -15,8 +15,11 @@ package checkmarx
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -24,9 +27,13 @@ import (
 	"k8s.io/test-infra/prow/git/v2"
 	"k8s.io/test-infra/prow/github"
 	"k8s.io/test-infra/prow/pluginhelp"
+	"k8s.io/test-infra/prow/plugins"
+	"k8s.io/test-infra/prow/repoowners"
 )
 
 type Server struct {
+	Oc             *repoowners.Client
+	Pa             *plugins.ConfigAgent
 	TokenGenerator func() []byte
 	ConfigAgent    *config.Agent
 	Gc             git.ClientFactory
@@ -35,7 +42,11 @@ type Server struct {
 }
 
 const (
-	InvalidLabel = "do-not-merge"
+	InvalidLabel = "do-not-merge/verify-checkmarx"
+)
+
+var (
+	titleRegex = regexp.MustCompile(`[A-Z]{1,}-\d+`)
 )
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +103,18 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		action = p.Action
 		// msg    = "This pull request does not have a jira tag on the title"
 	)
+	//
+	botName, err := s.Ghc.BotName()
+	if err != nil {
+		l.WithError(err).Error("failed getting botName")
+		return err
+	}
+
+	// Clear comments
+	if err = s.Ghc.DeleteStaleComments(org, repo, number, nil, shouldPrune(botName)); err != nil {
+		l.WithError(err).Error("failed to prune comments")
+		return err
+	}
 
 	// Setup Logger
 	l = l.WithFields(logrus.Fields{
@@ -109,24 +132,72 @@ func (s *Server) handlePR(l *logrus.Entry, p *github.PullRequestEvent) (err erro
 		return nil
 	}
 
-	// Only add for one repo for now
-	if repo != "prow-plugins" {
-		l.Infof("Repo '%v' not allowed", repo)
-		return nil
+	pluginAgent := s.Pa
+	if pluginAgent == nil {
+		return errors.New("Could not get Plugin Agent in checkmarx")
 	}
 
-	// @TODO: Checkmarx
+	config := pluginAgent.Config()
+	if config == nil {
+		return errors.New("Could not get Configuration in checkmarx")
+	}
 
-	err = s.Ghc.RemoveLabel(org, repo, number, InvalidLabel)
+	if orgs, repos := config.EnabledReposForExternalPlugin("checkmarx"); orgs != nil || repos != nil {
+		found := false
+		repoOrg := fmt.Sprintf("%v/%v", org, repo)
+		for _, v := range repos {
+			if v == repoOrg {
+				found = true
+			}
+		}
+
+		if found {
+			l.Infof("%v is elegible", repoOrg)
+		} else {
+			err = fmt.Errorf("Org Repo '%v' not allowed", repoOrg)
+			l.Error(err)
+			return err
+		}
+	}
+
+	err = s.Ghc.AddLabel(org, repo, number, InvalidLabel)
 	if err != nil {
-		l.WithError(err).Error("failed to remove label")
+		l.WithError(err).Error("failed to add label")
 		return err
 	}
-	return err
+	l.Info("Label added %v", InvalidLabel)
+
+	// @TODO: Start checkmarx job
+	l.Info("Start prow job")
+	// @TODO: Create commentary to tell job status
+	// s.ghc.CreateComment(org, repo, number, msg)
+	// if err != nil {
+	// 	l.WithError(err).Error("failed to add label")
+	// 	return err
+	// }
+
+	// @TODO: Remove label when job is done
+	// err = s.Ghc.RemoveLabel(org, repo, number, InvalidLabel)
+	// if err != nil {
+	// 	l.WithError(err).Error("failed to remove label")
+	// 	return err
+	// }
+
+	l.Info("HandlePR end")
+	return nil
 }
 
+//
 func HelpProvider(_ []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
 	return &pluginhelp.PluginHelp{
-		Description: "The Checkmarx plugin checks your PR for vulnerabilities",
+		Description: "The Jira checker plugin checks your PR name",
 	}, nil
+}
+
+//
+func shouldPrune(botName string) func(github.IssueComment) bool {
+	return func(ic github.IssueComment) bool {
+		hasMsgs := strings.Contains(ic.Body, InvalidLabel)
+		return github.NormLogin(botName) == github.NormLogin(ic.User.Login) && hasMsgs
+	}
 }

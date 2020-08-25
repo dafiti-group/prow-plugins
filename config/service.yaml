@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prow-plugins
+  namespace: prow
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8888
+  selector:
+    app: prow-plugins
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prow
+  name: deck
+spec:
+  selector:
+    app: deck
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prow
+  name: prow-controller-manager
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  namespace: prow
+  name: "deck"
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  namespace: prow
+  name: "sinker"
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  namespace: prow
+  name: "horologium"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prow
+  name: hook
+spec:
+  selector:
+    app: hook
+  ports:
+  - port: 9090
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prow
+  name: "hook"
+---
