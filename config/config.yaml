@@ -43,23 +43,35 @@ data:
             - do-not-merge/no-jira-issue-on-title
             - do-not-merge/verify-checkmarx
 
-    in_repo_config:
-      enabled:
-        # The key can be one of "*" for "globally", "org" or "org/repo".
-        # The narrowest match is used.
-        dafiti-group/prow-plugins: true
+    periodics:
+    - name: prow-job-test         # Names need not be unique, but must match the regex ^[A-Za-z0-9-._]+$
+      decorate: false        # Enable Pod Utility decoration. (see below)
+      # interval: 1h          # Anything that can be parsed by time.ParseDuration.
+      # Alternatively use a cron instead of an interval, for example:
+      # cron: "05 15 * * 1-5"  # Run at 7:05 PST (15:05 UTC) every M-F
+      cron: "5 * * * *"
+      spec:
+        containers:
+        - name: prowjob-echo
+          image: alpine:latest
+          command: ["ls", "-l"]
+          restartPolicy: Never
 
-      # Clusters must be allowed before they can be used. Below is the default: Allow the `default` cluster
-      # globally.
-      # This setting also allows using "*" for "globally", "org" or "org/repo" as key.
-      # a given repo. All clusters that are allowed for the specific repo, its org or
-      # globally can be used.
-      allowed_clusters:
-        "*": ["default"]
+    presubmits:
+      dafiti-group/prow-plugins:
+      - name: prow-ls
+        always_run: true
+        decorate: true
+        spec:
+          containers:
+          - name: prowjob-echo
+            image: alpine:latest
+            command: ["ls", "-l"]
+            restartPolicy: Never
 
     sinker:
       resync_period: 1m
-      max_prowjob_age: 48h
+      max_prowjob_age: 1h
       max_pod_age: 48h
       terminated_pod_ttl: 30m
 

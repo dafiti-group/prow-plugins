@@ -1,4 +1,4 @@
-presubmits:
+postsubmits:
   dafiti-group/prow-plugins:
   - name: prow-job-test
     always_run: true
