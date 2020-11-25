@@ -25,6 +25,8 @@ docker run --rm  --network="host" -v "$PWD/:/root" seriouscomp/phony \
   --payload /root/examples/push.json
 ```
 
+The contents inside example are github request, you can check the webhook fireds [here](https://github.com/organizations/dafiti-group/settings/hooks/224575357)
+
 ## Testing
 
 ## Deploy
