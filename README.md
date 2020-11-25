@@ -16,7 +16,7 @@ Before running you need to setup the github access token, assuming you have it i
 
 The `hmac` is the token used for a basic authentication, the fake one used for this example is `e0e8b7f3b67db6837ead4aeabd14547be121d5de`
 
-Assuming you have a k8s cluster running execute `tilt up` after a few seconds the application should be up and running, you can execute phony or a curl to make a request
+Assuming you have a k8s cluster running execute `tilt up` after a few seconds the application should be up and running, you can execute [phony](https://github.com/kubernetes/test-infra/tree/master/prow/phony) or a curl to make a request
 ```
 docker run --rm  --network="host" -v "$PWD/:/root" seriouscomp/phony \
   --address http://127.0.0.1:8888/jira-checker \
