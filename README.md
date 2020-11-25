@@ -24,10 +24,24 @@ docker run --rm  --network="host" -v "$PWD/:/root" seriouscomp/phony \
   --event pull_request \
   --payload /root/examples/push.json
 ```
+or
+
+```
+go run ./cmd/phony \
+  --address http://127.0.0.1:8888/jira-checker \
+  --hmac e0e8b7f3b67db6837ead4aeabd14547be121d5de \
+  --event pull_request \
+  --payload examples/push.json
+```
 
 The contents inside example are github request, you can check the webhook fireds [here](https://github.com/organizations/dafiti-group/settings/hooks/224575357)
 
 ## Testing
+
+
+### Phony
+
+phony is the cli that prow uses to replicated the request made by github, we copied the code from the prow [repo](https://github.com/kubernetes/test-infra/tree/master/prow/cmd/phony)
 
 ## Deploy
 
