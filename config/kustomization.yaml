@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: prow
+# This is throwing a error
+# https://github.com/kubernetes-sigs/kustomize/issues/1438
+# namespace: prow
 
 resources:
 - ns.yaml
@@ -18,3 +20,4 @@ secretGenerator:
   # you can only specify one env file per secret.
   env: ./secrets/env
   type: Opaque
+  namespace: prow

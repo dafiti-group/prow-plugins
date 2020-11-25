@@ -22,6 +22,7 @@ data:
 kind: ConfigMap
 metadata:
   name: plugins
+  namespace: prow
 # Config
 ---
 apiVersion: v1
@@ -42,32 +43,6 @@ data:
             - do-not-merge
             - do-not-merge/no-jira-issue-on-title
             - do-not-merge/verify-checkmarx
-
-    periodics:
-    - name: prow-job-test         # Names need not be unique, but must match the regex ^[A-Za-z0-9-._]+$
-      decorate: false        # Enable Pod Utility decoration. (see below)
-      # interval: 1h          # Anything that can be parsed by time.ParseDuration.
-      # Alternatively use a cron instead of an interval, for example:
-      # cron: "05 15 * * 1-5"  # Run at 7:05 PST (15:05 UTC) every M-F
-      cron: "5 * * * *"
-      spec:
-        containers:
-        - name: prowjob-echo
-          image: alpine:latest
-          command: ["ls", "-l"]
-          restartPolicy: Never
-
-    presubmits:
-      dafiti-group/prow-plugins:
-      - name: prow-ls
-        always_run: true
-        decorate: true
-        spec:
-          containers:
-          - name: prowjob-echo
-            image: alpine:latest
-            command: ["ls", "-l"]
-            restartPolicy: Never
 
     sinker:
       resync_period: 1m
@@ -101,3 +76,4 @@ data:
 kind: ConfigMap
 metadata:
   name: config
+  namespace: prow
